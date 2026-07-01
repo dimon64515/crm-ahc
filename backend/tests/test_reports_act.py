@@ -40,3 +40,18 @@ def test_act_table_has_work_date_column():
     assert tables, "Таблица работ не найдена"
     header = [cell.text for cell in tables[0].rows[0].cells]
     assert "Дата работ" in header, f"Столбец 'Дата работ' отсутствует: {header}"
+
+
+def test_act_header_date_is_russian():
+    russian_months = [
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    ]
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    found = False
+    for p in doc.paragraphs:
+        if "г. Пятигорск" in p.text and any(month in p.text for month in russian_months):
+            found = True
+            break
+    assert found, "Русская дата в шапке акта не найдена"

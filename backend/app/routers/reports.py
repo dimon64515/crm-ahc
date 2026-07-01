@@ -364,7 +364,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     today = datetime.now()
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run = p.add_run(f"г. Пятигорск\t«{today.day:02d}» {today.strftime('%B')} {today.year} г.")
+    run = p.add_run(f"г. Пятигорск\t{_format_period_date(today.date())}")
     run.font.name = "Times New Roman"
     run.font.size = Pt(12)
 
