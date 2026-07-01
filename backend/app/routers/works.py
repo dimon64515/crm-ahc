@@ -243,8 +243,8 @@ def update_work(
         # Полное редактирование для администратора
         if data.building_id is not None:
             building = db.query(Building).filter(Building.id == data.building_id).first()
-            if not building:
-                raise HTTPException(status_code=404, detail="Корпус не найден")
+            if not building or not building.is_active:
+                raise HTTPException(status_code=400, detail="Корпус не найден или неактивен")
             work.building_id = data.building_id
 
         if data.service_id is not None:
@@ -256,8 +256,8 @@ def update_work(
 
         if data.user_id is not None:
             user = db.query(User).filter(User.id == data.user_id).first()
-            if not user:
-                raise HTTPException(status_code=404, detail="Пользователь не найден")
+            if not user or not user.is_active or user.role != "contractor":
+                raise HTTPException(status_code=400, detail="Подрядчик не найден или неактивен")
             work.user_id = data.user_id
 
         if data.materials is not None:

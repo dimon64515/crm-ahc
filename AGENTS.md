@@ -314,7 +314,15 @@ docker-compose up -d
 
 ## Тестирование
 
-На текущий момент в проекте **отсутствуют автоматические тесты** (unit, integration, e2e). При добавлении тестов рекомендуется:
+В рамках Phase 1 в `backend/tests/` добавлены backend-тесты на FastAPI `TestClient`. Для запуска:
+
+```bash
+cd backend
+source venv/bin/activate
+PYTHONPATH=/home/dimon64515/projects/crm/backend pytest tests/ -v
+```
+
+Рекомендации:
 
 - Backend: `pytest` + `httpx`/`TestClient` из FastAPI + `pytest-asyncio`.
 - Frontend: `vitest` (уже есть в экосистеме Vite) + `@testing-library/react`.

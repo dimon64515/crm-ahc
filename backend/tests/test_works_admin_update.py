@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -422,4 +422,161 @@ def test_admin_update_duplicate_material_returns_400():
         },
     )
     assert response.status_code == 400, response.text
+    db.close()
+
+
+def test_admin_update_inactive_building_returns_400():
+    db = TestingSessionLocal()
+    admin = User(username="admin_inactive_bld", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor_inactive_bld", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building_active = Building(number="80", name="Активный корпус", is_active=True)
+    building_inactive = Building(number="81", name="Неактивный корпус", is_active=False)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    db.add_all([admin, contractor, building_active, building_inactive, service])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building_active.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("1.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("100.00"),
+        materials_total_price=Decimal("0"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    login = client.post("/api/auth/login", json={"username": "admin_inactive_bld", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"building_id": building_inactive.id},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Корпус не найден или неактивен"
+    db.close()
+
+
+def test_admin_update_non_contractor_user_returns_400():
+    db = TestingSessionLocal()
+    admin = User(username="admin_non_contractor", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor_real", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    director = User(username="director_non_contractor", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    building = Building(number="90", name="Корпус 90", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    db.add_all([admin, contractor, director, building, service])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("1.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("100.00"),
+        materials_total_price=Decimal("0"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    login = client.post("/api/auth/login", json={"username": "admin_non_contractor", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"user_id": director.id},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Подрядчик не найден или неактивен"
+    db.close()
+
+
+def test_admin_update_future_work_date_returns_400():
+    db = TestingSessionLocal()
+    admin = User(username="admin_future", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor_future", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="100", name="Корпус 100", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    db.add_all([admin, contractor, building, service])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("1.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("100.00"),
+        materials_total_price=Decimal("0"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    login = client.post("/api/auth/login", json={"username": "admin_future", "password": "pass"})
+    token = login.json()["access_token"]
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"work_date": future_date},
+    )
+    assert response.status_code == 422, response.text
+    errors = response.json()["detail"]
+    assert any("Дата работы не может быть в будущем" in str(err.get("msg", "")) for err in errors)
+    db.close()
+
+
+def test_contractor_update_future_work_date_returns_400():
+    db = TestingSessionLocal()
+    contractor = User(username="contractor_future2", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="101", name="Корпус 101", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    db.add_all([contractor, building, service])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("1.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("100.00"),
+        materials_total_price=Decimal("0"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_future2", "password": "pass"})
+    token = login.json()["access_token"]
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"work_date": future_date},
+    )
+    assert response.status_code == 422, response.text
+    errors = response.json()["detail"]
+    assert any("Дата работы не может быть в будущем" in str(err.get("msg", "")) for err in errors)
     db.close()

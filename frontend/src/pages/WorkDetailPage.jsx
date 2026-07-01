@@ -70,7 +70,10 @@ export default function WorkDetailPage() {
   const handleDelete = async () => {
     if (!window.confirm('Удалить запись?')) return;
     setDeleting(true);
-    try { await worksAPI.remove(id); navigate('/dashboard'); }
+    try {
+      await worksAPI.remove(id);
+      navigate(user.role === 'contractor' ? '/my-works' : '/dashboard');
+    }
     catch { alert('Ошибка удаления'); }
     finally { setDeleting(false); }
   };

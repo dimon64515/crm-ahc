@@ -176,11 +176,27 @@ class WorkUpdate(BaseModel):
     service_quantity: Optional[Decimal] = Field(None, gt=0)
     work_date: Optional[date] = None
 
-    @field_validator('service_quantity', 'work_date', mode='before')
+    @field_validator('service_quantity', mode='before')
     @classmethod
     def empty_str_to_none(cls, v):
         if v == '' or v is None:
             return None
+        return v
+
+    @field_validator('work_date', mode='before')
+    @classmethod
+    def empty_str_work_date_to_none(cls, v):
+        if v == '' or v is None:
+            return None
+        return v
+
+    @field_validator('work_date')
+    @classmethod
+    def work_date_not_in_future(cls, v):
+        if v is None:
+            return v
+        if v > date.today():
+            raise ValueError('Дата работы не может быть в будущем')
         return v
 
 
