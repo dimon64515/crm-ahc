@@ -24,13 +24,13 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True, index=True),
         sa.Column("building_id", sa.Integer(), sa.ForeignKey("buildings.id"), nullable=False),
         sa.Column("description", sa.Text(), nullable=False),
-        sa.Column("status", sa.String(20), nullable=False, default="new", server_default=sa.text("'new'")),
+        sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'new'")),
         sa.Column("created_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("assigned_to", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
         sa.Column("due_date", sa.Date(), nullable=False),
-        sa.Column("extended_count", sa.Integer(), default=0, server_default=sa.text("0")),
+        sa.Column("extended_count", sa.Integer(), server_default=sa.text("0")),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now()),
     )
     op.create_table(
         "request_photos",
