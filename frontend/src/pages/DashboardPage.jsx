@@ -65,12 +65,11 @@ function DetailedReport() {
   const [sortOrder, setSortOrder] = useState('desc');
   const [loading, setLoading] = useState(false);
   const [totals, setTotals] = useState({ service_total: 0, materials_total: 0, total: 0 });
-  const [printView, setPrintView] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => { loadBuildings(); loadServices(); loadContractors(); loadWorks(); }, []);
 
-  const loadBuildings = async () => { try { const res = await buildingsAPI.list(); setBuildings(res.data); } catch (e) {} };
+  const loadBuildings = async () => { try { const res = await buildingsAPI.list({ is_active: true }); setBuildings(res.data); } catch (e) {} };
   const loadServices = async () => { try { const res = await servicesAPI.list(); setServices(res.data.items || []); } catch (e) {} };
   const loadContractors = async () => { try { const res = await usersAPI.list({ role: 'contractor' }); setContractors(res.data.items || []); } catch (e) {} };
 
@@ -101,6 +100,22 @@ function DetailedReport() {
     a.href = url;
     a.download = `works_report_${filters.date_from || 'all'}_${filters.date_to || 'all'}.xlsx`;
     a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = async () => {
+    try {
+      const res = await reportsAPI.act(filters);
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `act_${filters.date_from || 'all'}_${filters.date_to || 'all'}.docx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Ошибка формирования акта: ' + (e.response?.data?.detail || 'нет данных для выбранных фильтров'));
+    }
   };
 
   const handleInlinePriceEdit = async (workId, currentPrice) => {
@@ -151,7 +166,7 @@ function DetailedReport() {
         <button onClick={handleFilter} style={styles.filterBtn}>Применить</button>
         <button onClick={handleReset} style={styles.secondaryBtn}>Сбросить</button>
         <button onClick={handleExport} style={styles.exportBtn}>📥 Excel</button>
-        <button onClick={() => setPrintView(true)} style={styles.ghostBtn} className="no-print">🖨️ Печатная форма</button>
+        <button onClick={handlePrint} style={styles.ghostBtn} className="no-print">🖨️ Печатная форма</button>
       </div>
 
       <div style={styles.statsRow}>
@@ -201,7 +216,7 @@ function DetailedReport() {
                 <td style={{ textAlign: 'right' }} className="tabular-nums">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                     <span>{parseFloat(w.service_unit_price || 0).toFixed(2)}</span>
-                    {(user.role === 'admin' || user.role === 'director') && (
+                    {user.role === 'admin' && (
                       <button onClick={(e) => { e.stopPropagation(); handleInlinePriceEdit(w.id, w.service_unit_price); }} style={styles.inlineEditBtn} title="Изменить цену">✎</button>
                     )}
                   </div>
@@ -240,65 +255,6 @@ function DetailedReport() {
         </div>
       )}
 
-      {printView && (
-        <div style={styles.printOverlay}>
-          <div style={styles.printBox}>
-            <div style={styles.printHeader}>
-              <h2 style={styles.printTitle}>Отчёт по выполненным работам</h2>
-              <p style={styles.printMeta}>
-                Период: {filters.date_from || 'все даты'} — {filters.date_to || 'все даты'}
-                <br />
-                Дата формирования: {new Date().toLocaleDateString('ru-RU')}
-                <br />
-                Всего записей: {total}
-              </p>
-            </div>
-            <table style={{ ...styles.table, boxShadow: 'none', border: '1px solid #000' }}>
-              <thead>
-                <tr style={{ background: '#f3f4f6' }}>
-                  <th style={{ border: '1px solid #000' }}>Дата</th>
-                  <th style={{ border: '1px solid #000' }}>Корпус</th>
-                  <th style={{ border: '1px solid #000' }}>Подрядчик</th>
-                  <th style={{ border: '1px solid #000' }}>Вид работы</th>
-                  <th style={{ border: '1px solid #000' }}>Наименование</th>
-                  <th style={{ border: '1px solid #000', textAlign: 'center' }}>Кол-во</th>
-                  <th style={{ border: '1px solid #000', textAlign: 'right' }}>Сумма работ</th>
-                  <th style={{ border: '1px solid #000', textAlign: 'right' }}>Сумма мат.</th>
-                  <th style={{ border: '1px solid #000', textAlign: 'right' }}>ИТОГО</th>
-                </tr>
-              </thead>
-              <tbody>
-                {works.map(w => (
-                  <tr key={w.id}>
-                    <td style={{ border: '1px solid #000' }}>{w.work_date}</td>
-                    <td style={{ border: '1px solid #000' }}>{w.building?.number}</td>
-                    <td style={{ border: '1px solid #000' }}>{w.created_by?.full_name || w.created_by?.username}</td>
-                    <td style={{ border: '1px solid #000' }}>{w.service?.name}</td>
-                    <td style={{ border: '1px solid #000' }}>{w.description}</td>
-                    <td style={{ border: '1px solid #000', textAlign: 'center' }}>{w.service_quantity}</td>
-                    <td style={{ border: '1px solid #000', textAlign: 'right' }}>{parseFloat(w.service_total_price || 0).toFixed(2)}</td>
-                    <td style={{ border: '1px solid #000', textAlign: 'right' }}>{parseFloat(w.materials_total_price || 0).toFixed(2)}</td>
-                    <td style={{ border: '1px solid #000', textAlign: 'right', fontWeight: 600 }}>{parseFloat(w.total_price || 0).toFixed(2)}</td>
-                  </tr>
-                ))}
-                <tr style={{ fontWeight: 600, background: '#f3f4f6' }}>
-                  <td colSpan={6} style={{ border: '1px solid #000', textAlign: 'right' }}>ИТОГО:</td>
-                  <td style={{ border: '1px solid #000', textAlign: 'right' }}>{totals.service_total.toFixed(2)}</td>
-                  <td style={{ border: '1px solid #000', textAlign: 'right' }}>{totals.materials_total.toFixed(2)}</td>
-                  <td style={{ border: '1px solid #000', textAlign: 'right' }}>{totals.total.toFixed(2)}</td>
-                </tr>
-              </tbody>
-            </table>
-            <div style={styles.printSignature}>
-              <p>Зам. директора по АХЧ _______________________ / _______________________</p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }} className="no-print">
-              <button onClick={() => window.print()} style={styles.filterBtn}>🖨️ Печать</button>
-              <button onClick={() => setPrintView(false)} style={styles.secondaryBtn}>Закрыть</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -310,7 +266,7 @@ function SummaryReport() {
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { buildingsAPI.list().then(r => setBuildings(r.data)); }, []);
+  useEffect(() => { buildingsAPI.list({ is_active: true }).then(r => setBuildings(r.data)); }, []);
 
   const loadReport = async () => {
     setLoading(true);

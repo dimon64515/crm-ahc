@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal
@@ -169,6 +169,19 @@ class WorkCreate(BaseModel):
 class WorkUpdatePrices(BaseModel):
     service_unit_price: Optional[Decimal] = None
     materials: List[dict] = []
+
+
+class WorkUpdate(BaseModel):
+    description: Optional[str] = None
+    service_quantity: Optional[Decimal] = Field(None, gt=0)
+    work_date: Optional[date] = None
+
+    @field_validator('service_quantity', 'work_date', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == '' or v is None:
+            return None
+        return v
 
 
 class WorkResponse(BaseModel):

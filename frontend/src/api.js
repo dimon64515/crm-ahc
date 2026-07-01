@@ -43,6 +43,8 @@ export const buildingsAPI = {
   create: (data) => api.post('/buildings', data),
   update: (id, data) => api.put(`/buildings/${id}`, data),
   remove: (id) => api.delete(`/buildings/${id}`),
+  deactivate: (id) => api.delete(`/buildings/${id}`),
+  activate: (id) => api.put(`/buildings/${id}/activate`),
 };
 
 export const usersAPI = {
@@ -111,6 +113,7 @@ export const reportsAPI = {
   summary: (params) => api.get('/reports/summary', { params }),
   export: (params) => api.get('/reports/export', { params, responseType: 'blob' }),
   exportSummary: (params) => api.get('/reports/summary/export', { params, responseType: 'blob' }),
+  act: (params) => api.get('/reports/act', { params, responseType: 'blob' }),
 };
 
 export const backupsAPI = {
@@ -119,4 +122,5 @@ export const backupsAPI = {
   createPhotos: (params) => api.post('/backups/photos', null, { params }),
   download: (id) => api.get(`/backups/download/${id}`, { responseType: 'blob' }),
   remove: (id) => api.delete(`/backups/${id}`),
+  delete: (id) => api.delete(`/backups/${id}`),
 };

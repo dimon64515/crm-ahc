@@ -8,9 +8,9 @@ from app.models import Work, WorkPhoto, WorkFile, WorkMaterial, Building, Servic
 from app.schemas import (
     WorkCreate, WorkResponse, WorkListResponse, WorkListItem,
     WorkPhotoResponse, WorkFileResponse, WorkMaterialResponse,
-    WorkUpdatePrices
+    WorkUpdatePrices, WorkUpdate
 )
-from app.core.dependencies import get_current_user, require_contractor, require_director
+from app.core.dependencies import get_current_user, require_contractor, require_director, require_admin
 from app.services.file_service import save_photo, save_work_file, delete_file, get_file_url
 
 router = APIRouter(prefix="/works", tags=["works"])
@@ -169,6 +169,9 @@ def list_works(
 ):
     query = db.query(Work)
     
+    if current_user.role == 'contractor':
+        query = query.filter(Work.user_id == current_user.id)
+    
     if date_from:
         query = query.filter(Work.work_date >= date_from)
     if date_to:
@@ -215,13 +218,15 @@ def get_work(
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
+    if current_user.role not in ('admin', 'director') and work.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
     return build_work_response(work)
 
 
 @router.put("/{work_id}", response_model=WorkResponse)
 def update_work(
     work_id: int,
-    data: WorkCreate,
+    data: WorkUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -229,47 +234,20 @@ def update_work(
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
     
-    if current_user.role not in ('admin', 'director') and work.user_id != current_user.id:
+    if current_user.role == 'director':
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    if current_user.role == 'contractor' and work.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
     
-    building = db.query(Building).filter(Building.id == data.building_id).first()
-    if not building:
-        raise HTTPException(status_code=404, detail="Корпус не найден")
-    
-    service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
-    if not service:
-        raise HTTPException(status_code=404, detail="Вид работы не найден")
-    
-    work.building_id = data.building_id
-    work.work_date = data.work_date
-    work.service_id = data.service_id
-    work.description = data.description
-    work.service_quantity = data.service_quantity
-    work.service_unit_price = service.price
-    work.service_total_price = Decimal(str(data.service_quantity)) * service.price
-    
-    # Удаление старых материалов
-    for wm in work.work_materials:
-        db.delete(wm)
-    
-    materials_total = Decimal('0')
-    for mat_data in data.materials:
-        material = db.query(Material).filter(Material.id == mat_data.material_id, Material.is_active == True).first()
-        if not material:
-            continue
-        mat_total = mat_data.quantity * material.price
-        work_material = WorkMaterial(
-            work_id=work.id,
-            material_id=mat_data.material_id,
-            quantity=mat_data.quantity,
-            unit_price=material.price,
-            total_price=mat_total,
-        )
-        db.add(work_material)
-        materials_total += mat_total
-    
-    work.materials_total_price = materials_total
-    work.total_price = work.service_total_price + materials_total
+    if data.description is not None:
+        work.description = data.description
+    if data.work_date is not None:
+        work.work_date = data.work_date
+    if data.service_quantity is not None:
+        work.service_quantity = data.service_quantity
+        # Пересчитываем сумму работы по текущей цене, чтобы не сбить ручные корректировки
+        work.service_total_price = Decimal(str(data.service_quantity)) * work.service_unit_price
+        work.total_price = work.service_total_price + (work.materials_total_price or Decimal('0'))
     
     db.commit()
     db.refresh(work)
@@ -286,7 +264,9 @@ def delete_work(
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
     
-    if current_user.role not in ('admin', 'director') and work.user_id != current_user.id:
+    if current_user.role == 'director':
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    if current_user.role == 'contractor' and work.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
     
     for photo in work.photos:
@@ -352,6 +332,9 @@ def upload_photos(
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
     
+    if current_user.role == 'contractor' and work.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    
     if len(work.photos) + len(files) > 20:
         raise HTTPException(status_code=400, detail="Максимум 20 фото на работу")
     
@@ -404,7 +387,7 @@ def update_work_prices(
     work_id: int,
     data: WorkUpdatePrices,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_director)
+    current_user: User = Depends(require_admin)
 ):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:

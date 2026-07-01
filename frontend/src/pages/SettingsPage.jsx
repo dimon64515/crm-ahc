@@ -134,6 +134,11 @@ function BuildingsTab() {
     try { await buildingsAPI.deactivate(id); load(); } catch (e) {}
   };
 
+  const handleActivate = async (id) => {
+    if (!window.confirm('Активировать корпус?')) return;
+    try { await buildingsAPI.activate(id); load(); } catch (e) {}
+  };
+
   return (
     <div>
       <form onSubmit={handleSubmit} style={styles.formInline}>
@@ -148,18 +153,25 @@ function BuildingsTab() {
         <thead><tr><th>№</th><th>Название</th><th>Адрес</th><th>Площадь</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
         <tbody>
           {items.map(b => (
-            <tr key={b.id}>
+            <tr key={b.id} style={!b.is_active ? styles.inactiveRow : {}}>
               <td>{b.number}</td>
               <td>{b.name || '—'}</td>
               <td>{b.address || '—'}</td>
               <td className="tabular-nums">{b.area ? `${parseFloat(b.area).toFixed(1)} м²` : '—'}</td>
               <td><span style={statusBadge(b.is_active)}>{b.is_active ? 'Активен' : 'Неактивен'}</span></td>
               <td style={{ textAlign: 'right' }}>
-                <button onClick={() => { setEditing(b.id); setForm({ number: b.number, name: b.name || '', address: b.address || '', area: b.area || '' }); }} style={styles.smallLink}>Ред.</button>
-                {b.is_active && <button onClick={() => handleDeactivate(b.id)} style={styles.smallDanger}>Деакт.</button>}
+                {b.is_active ? (
+                  <>
+                    <button onClick={() => { setEditing(b.id); setForm({ number: b.number, name: b.name || '', address: b.address || '', area: b.area || '' }); }} style={styles.smallLink}>Ред.</button>
+                    <button onClick={() => handleDeactivate(b.id)} style={styles.smallDanger}>Деакт.</button>
+                  </>
+                ) : (
+                  <button onClick={() => handleActivate(b.id)} style={styles.smallSuccess}>Актив.</button>
+                )}
               </td>
             </tr>
           ))}
+          {items.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#6b7280', padding: '48px' }}>Нет корпусов</td></tr>}
         </tbody>
       </table>
     </div>
@@ -335,19 +347,39 @@ function BackupsTab() {
 
   useEffect(() => { load(); }, []);
 
-  const load = async () => { try { const res = await backupsAPI.list(); setBackups(res.data || []); } catch (e) {} };
+  const load = async () => { try { const res = await backupsAPI.list(); setBackups(res.data.items || []); } catch (e) {} };
 
   const handleCreate = async () => {
     setCreating(true);
-    try { await backupsAPI.create(filter); load(); } catch (e) { alert('Ошибка создания резервной копии'); }
+    try {
+      if (filter.type === 'full') await backupsAPI.createFull();
+      else if (filter.type === 'photos') await backupsAPI.createPhotos(filter);
+      else { alert('Выбранный тип резервной копии не поддерживается'); setCreating(false); return; }
+      load();
+    } catch (e) { alert('Ошибка создания резервной копии'); }
     finally { setCreating(false); }
   };
 
-  const handleDownload = (id) => { window.open(`/api/backups/${id}/download`, '_blank'); };
+  const handleDownload = async (backupId) => {
+    try {
+      const res = await backupsAPI.download(backupId);
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${backupId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Ошибка скачивания архива');
+    }
+  };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (backupId) => {
     if (!window.confirm('Удалить резервную копию?')) return;
-    try { await backupsAPI.delete(id); load(); } catch (e) {}
+    try { await backupsAPI.remove(backupId); load(); } catch (e) {}
   };
 
   const formatDate = (d) => { if (!d) return '—'; return new Date(d).toLocaleString('ru-RU'); };
@@ -361,7 +393,6 @@ function BackupsTab() {
           <select value={filter.type} onChange={e => setFilter({ type: e.target.value })} style={styles.input}>
             <option value="full">Полная копия (БД + файлы)</option>
             <option value="photos">Только фото</option>
-            <option value="database">Только база данных</option>
           </select>
           <button onClick={handleCreate} disabled={creating} style={styles.primaryBtn}>
             {creating ? 'Создание…' : 'Создать'}
@@ -388,16 +419,16 @@ function BackupsTab() {
           </thead>
           <tbody>
             {backups.map(b => (
-              <tr key={b.id}>
+              <tr key={b.backup_id}>
                 <td>
-                  <span style={typeBadge(b.backup_type)}>{b.backup_type === 'full' ? 'Полная' : b.backup_type === 'photos' ? 'Фото' : 'БД'}</span>
+                  <span style={typeBadge(b.type)}>{b.type === 'full' ? 'Полная' : b.type === 'photos' ? 'Фото' : 'БД'}</span>
                 </td>
                 <td className="tabular-nums">{formatDate(b.created_at)}</td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{formatSize(b.size_bytes)}</td>
+                <td style={{ textAlign: 'right' }} className="tabular-nums">{formatSize((b.size_mb || 0) * 1024 * 1024)}</td>
                 <td><span style={statusBadge(b.status === 'completed')}>{b.status === 'completed' ? 'Готова' : b.status}</span></td>
                 <td style={{ textAlign: 'right' }}>
-                  <button onClick={() => handleDownload(b.id)} style={styles.smallLink}>Скачать</button>
-                  <button onClick={() => handleDelete(b.id)} style={styles.smallDanger}>Удалить</button>
+                  <button onClick={() => handleDownload(b.backup_id)} style={styles.smallLink}>Скачать</button>
+                  <button onClick={() => handleDelete(b.backup_id)} style={styles.smallDanger}>Удалить</button>
                 </td>
               </tr>
             ))}
@@ -444,6 +475,8 @@ const styles = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   smallLink: { padding: '4px 10px', background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
   smallDanger: { padding: '4px 10px', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
+  smallSuccess: { padding: '4px 10px', background: 'none', border: 'none', color: '#059669', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
+  inactiveRow: { backgroundColor: '#f9fafb', opacity: 0.7 },
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
   empty: { textAlign: 'center', padding: '48px 16px' },

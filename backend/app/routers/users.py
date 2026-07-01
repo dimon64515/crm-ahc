@@ -64,11 +64,11 @@ def create_user(
     
     user = User(
         username=data.username,
-        email=data.email,
-        phone=data.phone,
+        email=data.email or None,
+        phone=data.phone or None,
         hashed_password=get_password_hash(data.password),
         role=data.role,
-        full_name=data.full_name,
+        full_name=data.full_name or None,
     )
     db.add(user)
     db.commit()
@@ -88,9 +88,9 @@ def update_user(
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     
     user.username = data.username
-    user.email = data.email
-    user.phone = data.phone
-    user.full_name = data.full_name
+    user.email = data.email or None
+    user.phone = data.phone or None
+    user.full_name = data.full_name or None
     user.role = data.role
     if data.password:
         user.hashed_password = get_password_hash(data.password)

@@ -7,6 +7,8 @@ import WorkFormPage from './pages/WorkFormPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import WorkDetailPage from './pages/WorkDetailPage';
+import PhotoBackupPage from './pages/PhotoBackupPage';
+import MyWorksPage from './pages/MyWorksPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -59,6 +61,26 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={['admin']}>
             <Layout>
               <SettingsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/photo-backup"
+        element={
+          <ProtectedRoute allowedRoles={['director', 'admin']}>
+            <Layout>
+              <PhotoBackupPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-works"
+        element={
+          <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
+            <Layout>
+              <MyWorksPage />
             </Layout>
           </ProtectedRoute>
         }

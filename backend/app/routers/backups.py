@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import BackupLog, Work, WorkPhoto
-from app.core.dependencies import require_admin
+from app.core.dependencies import require_admin, require_director
 from app.core.config import get_settings
 
 router = APIRouter(prefix="/backups", tags=["backups"])
@@ -88,7 +88,7 @@ def create_photos_backup(
     date_to: str = None,
     building_id: int = None,
     db: Session = Depends(get_db),
-    admin = Depends(require_admin)
+    admin = Depends(require_director)
 ):
     settings = get_settings()
     backup_dir = get_backup_dir()
@@ -147,7 +147,7 @@ def create_photos_backup(
 @router.get("")
 def list_backups(
     db: Session = Depends(get_db),
-    admin = Depends(require_admin)
+    admin = Depends(require_director)
 ):
     logs = db.query(BackupLog).order_by(BackupLog.created_at.desc()).all()
     return {
@@ -169,7 +169,7 @@ def list_backups(
 def download_backup(
     backup_id: str,
     db: Session = Depends(get_db),
-    admin = Depends(require_admin)
+    admin = Depends(require_director)
 ):
     log = db.query(BackupLog).filter(BackupLog.backup_id == backup_id).first()
     if not log or not log.file_paths:

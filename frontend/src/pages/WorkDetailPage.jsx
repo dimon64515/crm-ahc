@@ -26,14 +26,14 @@ export default function WorkDetailPage() {
       setWork(res.data);
       setEdited({
         description: res.data.description || '',
-        service_quantity: res.data.service_quantity || '',
+        service_quantity: res.data.service_quantity ?? '',
         work_date: res.data.work_date || '',
       });
     } catch (e) { setWork(null); }
     finally { setLoading(false); }
   };
 
-  const canEdit = user.role === 'admin' || user.role === 'director' || (user.role === 'contractor' && work?.created_by?.id === user.id);
+  const canEdit = user.role === 'admin' || (user.role === 'contractor' && work?.created_by?.id === user.id);
 
   const handleDelete = async () => {
     if (!window.confirm('Удалить запись?')) return;
@@ -67,15 +67,59 @@ export default function WorkDetailPage() {
   };
 
   const handleUpdateWork = async () => {
+    const payload = {};
+
+    // Описание: отправляем только если изменилось
+    if (edited.description !== (work.description || '')) {
+      payload.description = edited.description;
+    }
+
+    // Дата: отправляем только если изменилась и не пустая
+    if (edited.work_date && edited.work_date !== work.work_date) {
+      payload.work_date = edited.work_date;
+    }
+
+    // Количество: нормализуем разделитель (запятая → точка) и проверяем
+    if (edited.service_quantity !== '' && edited.service_quantity !== undefined && edited.service_quantity !== null) {
+      const qtyStr = String(edited.service_quantity).replace(',', '.').trim();
+      const qty = parseFloat(qtyStr);
+      if (Number.isNaN(qty) || qty <= 0) {
+        alert('Количество должно быть числом больше 0');
+        return;
+      }
+      const originalQty = parseFloat(String(work.service_quantity).replace(',', '.').trim());
+      if (qty !== originalQty) {
+        payload.service_quantity = qty;
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setEditMode(false);
+      return;
+    }
+
+    console.log('[WorkDetail] update payload:', payload);
     try {
-      await worksAPI.update(id, {
-        description: edited.description,
-        service_quantity: parseFloat(edited.service_quantity),
-        work_date: edited.work_date,
-      });
+      await worksAPI.update(id, payload);
       setEditMode(false);
       loadWork();
-    } catch (e) { alert('Ошибка сохранения'); }
+    } catch (e) {
+      console.error('[WorkDetail] update error:', e.response?.data);
+      const data = e.response?.data;
+      let msg = 'Ошибка сохранения';
+      if (data) {
+        if (Array.isArray(data.detail)) {
+          msg = data.detail.map(err => `${err.loc?.join('.') || 'field'} — ${err.msg}`).join('\n');
+        } else if (typeof data.detail === 'string') {
+          msg = data.detail;
+        } else if (typeof data.detail === 'object' && data.detail !== null) {
+          msg = JSON.stringify(data.detail, null, 2);
+        } else if (typeof data === 'object' && data !== null) {
+          msg = JSON.stringify(data, null, 2);
+        }
+      }
+      alert(msg);
+    }
   };
 
   const handleUploadPhotos = async (e) => {
@@ -164,6 +208,11 @@ export default function WorkDetailPage() {
           <p style={styles.text}>{work.created_by?.full_name || work.created_by?.username}</p>
         </div>
 
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Количество</h3>
+          <p style={styles.text}>{work.service_quantity} {work.service?.unit || ''}</p>
+        </div>
+
         {editMode && (
           <div style={styles.row}>
             <div style={styles.field}>
@@ -183,13 +232,14 @@ export default function WorkDetailPage() {
           </div>
         )}
 
+        {user.role !== 'contractor' && (
         <div style={styles.totalsGrid}>
           <div style={styles.totalCard}>
             <div style={styles.totalLabel}>Сумма работ</div>
             <div style={styles.totalValue} className="tabular-nums">
               {parseFloat(work.service_total_price || 0).toFixed(2)}
             </div>
-            {(user.role === 'admin' || user.role === 'director') && (
+            {user.role === 'admin' && (
               <button onClick={() => {
                 const val = prompt('Новая цена за ед.:', work.service_unit_price || '');
                 if (val !== null) handlePriceEdit('service', val);
@@ -209,6 +259,7 @@ export default function WorkDetailPage() {
             </div>
           </div>
         </div>
+        )}
 
         {work.materials && work.materials.length > 0 && (
           <div style={styles.section}>
@@ -219,25 +270,31 @@ export default function WorkDetailPage() {
                   <tr>
                     <th>Наименование</th>
                     <th style={{ textAlign: 'center' }}>Кол-во</th>
-                    <th style={{ textAlign: 'right' }}>Цена</th>
-                    <th style={{ textAlign: 'right' }}>Сумма</th>
-                    {(user.role === 'admin' || user.role === 'director') && <th style={{ textAlign: 'right' }}>Действие</th>}
+                    {user.role === 'admin' && (
+                      <>
+                        <th style={{ textAlign: 'right' }}>Цена</th>
+                        <th style={{ textAlign: 'right' }}>Сумма</th>
+                        <th style={{ textAlign: 'right' }}>Действие</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {work.materials.map((m, idx) => (
                     <tr key={idx}>
-                      <td>{m.material?.name}</td>
+                      <td>{m.name || '—'}</td>
                       <td style={{ textAlign: 'center' }} className="tabular-nums">{m.quantity}</td>
-                      <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(m.unit_price || 0).toFixed(2)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{parseFloat(m.total_price || 0).toFixed(2)}</td>
-                      {(user.role === 'admin' || user.role === 'director') && (
-                        <td style={{ textAlign: 'right' }}>
-                          <button onClick={() => {
-                            const val = prompt('Новая цена за ед.:', m.unit_price || '');
-                            if (val !== null) handlePriceEdit('material', val, m.material_id);
-                          }} style={styles.smallLink}>Изменить</button>
-                        </td>
+                      {user.role === 'admin' && (
+                        <>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(m.unit_price || 0).toFixed(2)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{parseFloat(m.total_price || 0).toFixed(2)}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button onClick={() => {
+                              const val = prompt('Новая цена за ед.:', m.unit_price || '');
+                              if (val !== null) handlePriceEdit('material', val, m.material_id);
+                            }} style={styles.smallLink}>Изменить</button>
+                          </td>
+                        </>
                       )}
                     </tr>
                   ))}

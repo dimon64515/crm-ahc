@@ -174,7 +174,7 @@ Authorization: Bearer <jwt_token>
 
 **Query params:**
 - `search` — поиск по номеру/названию
-- `is_active` — фильтр по активности (default: true)
+- `is_active` — фильтр по активности (без параметра возвращаются все корпуса)
 
 **Response (200):**
 ```json
@@ -216,7 +216,11 @@ Authorization: Bearer <jwt_token>
 
 ### DELETE /buildings/{id} (admin)
 
-Удаление корпуса (soft delete).
+Удаление корпуса (soft delete, `is_active = false`).
+
+### PUT /buildings/{id}/activate (admin)
+
+Активация ранее деактивированного корпуса (`is_active = true`).
 
 ---
 
@@ -472,7 +476,11 @@ Soft delete.
 
 ### GET /works
 
-Список работ (для дашборда).
+Список работ.
+
+**Примечание:** подрядчик (`contractor`) видит только свои записи. `director` и `admin` видят все записи.
+
+**Query params:**
 
 **Query params:**
 - `date_from` — дата с (YYYY-MM-DD)
@@ -511,11 +519,30 @@ Soft delete.
 
 ### PUT /works/{id}
 
-Редактирование работы (только свои, либо admin/director).
+Частичное редактирование работы: описание, дата работы, количество услуги.
+
+**Доступ:**
+- `contractor` — только свои записи (`work.user_id == current_user.id`)
+- `admin` — любые записи
+- `director` — только просмотр, редактирование недоступно
+
+**Request:**
+```json
+{
+  "description": "Обновлённое описание",
+  "service_quantity": 20.5,
+  "work_date": "2025-05-28"
+}
+```
 
 ### DELETE /works/{id}
 
-Удаление работы (только свои, либо admin/director).
+Удаление работы.
+
+**Доступ:**
+- `contractor` — только свои записи
+- `admin` — любые записи
+- `director` — только просмотр, удаление недоступно
 
 ---
 
@@ -530,7 +557,11 @@ Soft delete.
 **Request:**
 - `files` — массив файлов (до 20 шт., до 10 МБ каждый)
 
-**Response (200):**
+**Доступ:**
+- `contractor` — может загружать фото только к своим записям (`work.user_id == current_user.id`)
+- `director`, `admin` — могут загружать фото к любым записям
+
+**Response (200):
 ```json
 {
   "success": true,
@@ -645,11 +676,13 @@ Soft delete.
 
 ---
 
-## 9. Редактирование цен (только director)
+## 9. Редактирование цен (только admin)
 
 ### PUT /works/{id}/prices
 
-Редактирование цен в записи работы (только для директора).
+Редактирование цен в записи работы.
+
+**Доступ:** только `admin`
 
 **Request:**
 ```json
@@ -681,11 +714,13 @@ Soft delete.
 
 ---
 
-## 10. Бэкапы (admin)
+## 10. Бэкапы
 
 ### POST /backups/photos
 
 Создание архива фотографий.
+
+**Доступ:** `director`, `admin`
 
 **Request:**
 ```json
@@ -733,6 +768,8 @@ Soft delete.
 ### POST /backups/full
 
 Создание полного бэкапа системы.
+
+**Доступ:** `admin`
 
 **Request:**
 ```json
@@ -801,6 +838,8 @@ Soft delete.
 
 История бэкапов.
 
+**Доступ:** `director`, `admin`
+
 **Response (200):**
 ```json
 {
@@ -825,6 +864,10 @@ Soft delete.
 
 Удаление архива бэкапа.
 
-### GET /backups/download/{backup_id}/part{number}
+**Доступ:** `admin`
 
-Скачивание части архива.
+### GET /backups/download/{backup_id}
+
+Скачивание архива.
+
+**Доступ:** `director`, `admin`

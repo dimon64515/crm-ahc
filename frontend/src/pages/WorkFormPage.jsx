@@ -18,28 +18,26 @@ export default function WorkFormPage() {
   const [serviceTotal, setServiceTotal] = useState(0);
   const [materials, setMaterials] = useState([{ id: 1, selected: null, quantity: 1, price: '', total: 0 }]);
   const [photos, setPhotos] = useState([]);
-  const [files, setFiles] = useState([]);
   const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [photoCounter, setPhotoCounter] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const photoInputRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   useEffect(() => { loadBuildings(); loadDraft(); }, []);
 
   // beforeunload: предупреждение при уходе с несохранённой формой
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (selectedBuilding || selectedService || description || photos.length || files.length) {
+      if (selectedBuilding || selectedService || description || photos.length) {
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [selectedBuilding, selectedService, description, photos, files]);
+  }, [selectedBuilding, selectedService, description, photos]);
 
   // Ctrl+Enter — сохранить форму
   const formRef = useRef(null);
@@ -70,8 +68,8 @@ export default function WorkFormPage() {
 
   const loadBuildings = async () => {
     try {
-      const res = await buildingsAPI.list();
-      const opts = (res.data || []).map(b => ({ value: b.id, label: `${b.number} — ${b.name}${b.area ? ` (${b.area} м²)` : ''}` }));
+      const res = await buildingsAPI.list({ is_active: true });
+      const opts = (res.data || []).map(b => ({ value: b.id, label: b.name || '' }));
       setBuildings(opts);
     } catch (e) {}
   };
@@ -102,13 +100,11 @@ export default function WorkFormPage() {
     return duplicates.length > 0;
   };
   const removeMaterialRow = (id) => { if (materials.length <= 1) return; setMaterials(materials.filter(m => m.id !== id)); };
-  const updateMaterial = (id, field, value) => {
-    setMaterials(materials.map(m => {
+  const updateMaterial = (id, updates) => {
+    setMaterials(prev => prev.map(m => {
       if (m.id !== id) return m;
-      const updated = { ...m, [field]: value };
-      if (field === 'selected' || field === 'quantity' || field === 'price') {
-        updated.total = parseFloat(updated.quantity || 0) * parseFloat(updated.price || 0);
-      }
+      const updated = { ...m, ...updates };
+      updated.total = parseFloat(updated.quantity || 0) * parseFloat(updated.price || 0);
       return updated;
     }));
   };
@@ -128,8 +124,7 @@ export default function WorkFormPage() {
   };
   const removePhoto = (idx) => { setPhotos(prev => prev.filter((_, i) => i !== idx)); setPhotoCounter(prev => prev - 1); };
 
-  const handleFiles = (fileList) => { setFiles(prev => [...prev, ...Array.from(fileList)]); };
-  const removeFile = (idx) => { setFiles(prev => prev.filter((_, i) => i !== idx)); };
+
 
   const saveDraft = () => {
     const draft = { selectedBuilding, selectedService, description, serviceQuantity, servicePrice, workDate };
@@ -180,6 +175,7 @@ export default function WorkFormPage() {
     e.preventDefault();
     if (!selectedBuilding || !selectedService) { setError('Выберите корпус и вид работы'); return; }
     if (photos.length > 20) { setError(`Максимум 20 фотографий (загружено ${photos.length})`); return; }
+    if (photos.length === 0) { setError('Загрузите хотя бы одну фотографию'); return; }
     if (checkDuplicateMaterials()) { setError('Материалы не должны дублироваться'); return; }
 
     // Фронтенд-валидация совместно с бэкендом
@@ -229,12 +225,6 @@ export default function WorkFormPage() {
         await worksAPI.uploadPhotos(workId, photos);
       }
 
-      // 3) Загружаем файлы отдельно
-      if (files.length > 0) {
-        console.log('[WorkForm] uploading', files.length, 'files');
-        await worksAPI.uploadFiles(workId, files);
-      }
-
       localStorage.removeItem('work_draft');
       setSelectedBuilding(null);
       setSelectedService(null);
@@ -244,7 +234,6 @@ export default function WorkFormPage() {
       setServiceTotal(0);
       setMaterials([{ id: 1, selected: null, quantity: 1, price: '', total: 0 }]);
       setPhotos([]);
-      setFiles([]);
       setPhotoCounter(0);
     } catch (err) {
       console.error('[WorkForm] save error:', err);
@@ -324,8 +313,13 @@ export default function WorkFormPage() {
             styles={selectStyles}
           />
           {serviceUnit && (
-            <div style={styles.serviceMeta}>Ед. изм.: <strong>{serviceUnit}</strong> · Цена: <strong className="tabular-nums">{parseFloat(servicePrice || 0).toFixed(2)}</strong></div>
+            <div style={styles.serviceMeta}>Ед. изм.: <strong>{serviceUnit}</strong></div>
           )}
+        </div>
+
+        <div style={styles.field}>
+          <label htmlFor="quantity" style={styles.label}>Количество <span style={styles.required}>*</span></label>
+          <input id="quantity" type="number" min="0" step="0.01" value={serviceQuantity} onChange={e => setServiceQuantity(e.target.value)} style={styles.input} />
         </div>
 
         <div style={styles.field}>
@@ -340,16 +334,13 @@ export default function WorkFormPage() {
           />
         </div>
 
+        {isAdmin && (
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Стоимость работы</h3>
           <div style={styles.row}>
             <div style={styles.field}>
-              <label htmlFor="quantity" style={styles.label}>Количество</label>
-              <input id="quantity" type="number" min="0" step="0.01" value={serviceQuantity} onChange={e => setServiceQuantity(e.target.value)} style={styles.input} />
-            </div>
-            <div style={styles.field}>
               <label htmlFor="price" style={styles.label}>Цена за ед.</label>
-              <input id="price" type="number" min="0" step="0.01" value={servicePrice} onChange={e => setServicePrice(e.target.value)} style={{ ...styles.input, ...(isAdmin ? {} : styles.readOnlyInput) }} placeholder="0.00" readOnly={!isAdmin} />
+              <input id="price" type="number" min="0" step="0.01" value={servicePrice} onChange={e => setServicePrice(e.target.value)} style={styles.input} placeholder="0.00" />
             </div>
             <div style={styles.field}>
               <label style={styles.label}>Сумма</label>
@@ -357,6 +348,7 @@ export default function WorkFormPage() {
             </div>
           </div>
         </div>
+        )}
 
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
@@ -371,31 +363,37 @@ export default function WorkFormPage() {
                   defaultOptions
                   loadOptions={loadMaterials}
                   value={m.selected}
-                  onChange={val => { updateMaterial(m.id, 'selected', val); if (val?.price !== undefined) updateMaterial(m.id, 'price', val.price.toFixed(2)); }}
+                  onChange={val => updateMaterial(m.id, { selected: val, price: val?.price !== undefined ? val.price.toFixed(2) : m.price })}
                   placeholder="Материал…"
                   styles={selectStyles}
                 />
               </div>
               <div style={{ flex: 1, minWidth: '100px' }}>
-                <input type="number" min="0" step="0.01" value={m.quantity} onChange={e => updateMaterial(m.id, 'quantity', e.target.value)} style={styles.input} placeholder="Кол-во" />
+                <input type="number" min="0" step="0.01" value={m.quantity} onChange={e => updateMaterial(m.id, { quantity: e.target.value })} style={styles.input} placeholder="Кол-во" />
               </div>
+              {isAdmin && (
+              <>
               <div style={{ flex: 1, minWidth: '100px' }}>
-                <input type="number" min="0" step="0.01" value={m.price} onChange={e => updateMaterial(m.id, 'price', e.target.value)} style={{ ...styles.input, ...(isAdmin ? {} : styles.readOnlyInput) }} placeholder="Цена" readOnly={!isAdmin} />
+                <input type="number" min="0" step="0.01" value={m.price} onChange={e => updateMaterial(m.id, { price: e.target.value })} style={styles.input} placeholder="Цена" />
               </div>
               <div style={{ minWidth: '90px' }}>
                 <div style={styles.totalBox} className="tabular-nums">{parseFloat(m.total || 0).toFixed(2)}</div>
               </div>
+              </>
+              )}
               <button type="button" onClick={() => removeMaterialRow(m.id)} style={styles.removeBtn} aria-label="Удалить материал" title="Удалить">×</button>
             </div>
           ))}
+          {isAdmin && (
           <div style={styles.materialsTotal}>
             <span>Сумма материалов:</span>
             <strong className="tabular-nums">{getMaterialsTotal().toFixed(2)}</strong>
           </div>
+          )}
         </div>
 
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Фотографии <span style={styles.hint}>(до 20)</span></h3>
+          <h3 style={styles.sectionTitle}>Фотографии <span style={styles.required}>*</span> <span style={styles.hint}>(до 20)</span></h3>
           <div
             onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -424,34 +422,12 @@ export default function WorkFormPage() {
           )}
         </div>
 
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Файлы</h3>
-          <div
-            onDragOver={e => { e.preventDefault(); }}
-            onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
-            onClick={() => fileInputRef.current?.click()}
-            style={styles.dropZone}
-          >
-            <input ref={fileInputRef} type="file" multiple onChange={e => handleFiles(e.target.files)} style={{ display: 'none' }} />
-            <div style={{ fontSize: '28px', marginBottom: '8px' }}>📎</div>
-            <div style={{ fontSize: '14px', fontWeight: 500, color: '#374151' }}>Перетащите файлы или нажмите</div>
-          </div>
-          {files.length > 0 && (
-            <div style={styles.fileList}>
-              {Array.from(files).map((file, idx) => (
-                <div key={idx} style={styles.fileItem}>
-                  <span style={styles.fileName} title={file.name}>{file.name}</span>
-                  <button type="button" onClick={() => removeFile(idx)} style={styles.fileRemove} aria-label={`Удалить файл ${file.name}`}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
+        {isAdmin && (
         <div style={styles.grandTotal}>
           <span>Общая сумма:</span>
           <strong className="tabular-nums" style={{ fontSize: '18px' }}>{getGrandTotal().toFixed(2)}</strong>
         </div>
+        )}
 
         <div style={styles.actions}>
           <button type="submit" disabled={submitting} style={styles.submitBtn} aria-busy={submitting}>
