@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { requestsAPI, usersAPI } from '../api';
+import { requestsAPI, usersAPI, getUploadUrl } from '../api';
 
 const STATUS_LABELS = {
   new: 'Новая',
@@ -244,14 +244,14 @@ export default function RequestDetailPage() {
                 {(req.photos || []).map((photo) => (
                   <a
                     key={photo.id}
-                    href={photo.url}
+                    href={getUploadUrl(photo.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={styles.photoLink}
                     title={photo.original_name || photo.filename}
                   >
                     <img
-                      src={photo.url}
+                      src={getUploadUrl(photo.url)}
                       alt={photo.original_name || photo.filename}
                       style={styles.photoThumb}
                       loading="lazy"

@@ -31,6 +31,13 @@ api.interceptors.response.use(
   }
 );
 
+export const getUploadUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  const apiBase = API_URL.replace(/\/api\/?$/, '');
+  return `${apiBase}${url}`;
+};
+
 export default api;
 
 export const authAPI = {
@@ -134,9 +141,12 @@ export const requestsAPI = {
   assign: (id, userId) => api.put(`/requests/${id}/assign`, { user_id: userId }),
   complete: (id) => api.put(`/requests/${id}/complete`),
   extend: (id) => api.post(`/requests/${id}/extend`),
-  uploadPhotos: (id, files) => {
+  uploadPhotos: (id, files, { onUploadProgress } = {}) => {
     const formData = new FormData();
     files.forEach((f) => formData.append('files', f));
-    return api.post(`/requests/${id}/photos`, formData, { headers: { 'Content-Type': undefined } });
+    return api.post(`/requests/${id}/photos`, formData, {
+      headers: { 'Content-Type': undefined },
+      onUploadProgress,
+    });
   },
 };
