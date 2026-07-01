@@ -10,6 +10,22 @@ from app.models import BackupLog, Work, WorkPhoto
 from app.core.dependencies import require_admin, require_director
 from app.core.config import get_settings
 
+
+def resolve_photo_path(file_path: str, upload_dir: str) -> str:
+    """Возвращает корректный абсолютный путь к фото независимо от того,
+    хранится ли в БД абсолютный или относительный путь."""
+    if not file_path:
+        return ""
+    if os.path.isabs(file_path) and os.path.exists(file_path):
+        return file_path
+    # Если путь относительный (например, photos/building_1/...)
+    relative = file_path.lstrip('/')
+    absolute = os.path.join(upload_dir, relative)
+    if os.path.exists(absolute):
+        return absolute
+    return ""
+
+
 router = APIRouter(prefix="/backups", tags=["backups"])
 
 
@@ -108,11 +124,12 @@ def create_photos_backup(
     photos = query.all()
     copied = 0
     for photo in photos:
-        src = os.path.join(settings.UPLOAD_DIR, photo.file_path)
-        if os.path.exists(src):
-            dst = os.path.join(backup_path, os.path.basename(photo.file_path))
-            shutil.copy2(src, dst)
-            copied += 1
+        src = resolve_photo_path(photo.file_path, settings.UPLOAD_DIR)
+        if not src:
+            continue
+        dst = os.path.join(backup_path, os.path.basename(src))
+        shutil.copy2(src, dst)
+        copied += 1
 
     # Create ZIP
     zip_path = os.path.join(backup_dir, f"{backup_id}.zip")
