@@ -200,6 +200,7 @@ def download_backup(
         file_path,
         filename=os.path.basename(file_path),
         media_type="application/zip",
+        content_disposition_type="attachment",
     )
 
 
