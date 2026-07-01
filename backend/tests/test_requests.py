@@ -207,3 +207,29 @@ def test_contractor_cannot_complete_alien_request():
     )
     assert response.status_code == 403, response.text
     db.close()
+
+
+def test_admin_can_extend_request():
+    db = TestingSessionLocal()
+    admin = User(username="admin_extend", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    watchman = User(username="watchman_extend", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="13", name="Корпус 13", is_active=True)
+    db.add_all([admin, watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Продлить", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "admin_extend", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        f"/api/requests/{req.id}/extend",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["extended_count"] == 1
+    db.close()

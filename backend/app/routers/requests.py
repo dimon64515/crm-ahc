@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Request, RequestPhoto, Building, User
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestListItem, RequestPhotoResponse, RequestAssign
-from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director
+from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
 
@@ -241,6 +241,23 @@ def complete_request(
         raise HTTPException(status_code=403, detail="Недостаточно прав")
 
     req.status = "completed"
+    db.commit()
+    db.refresh(req)
+    return build_request_response(req)
+
+
+@router.post("/{request_id}/extend", response_model=RequestResponse)
+def extend_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    req = db.query(Request).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    req.due_date = req.due_date + timedelta(days=5)
+    req.extended_count += 1
     db.commit()
     db.refresh(req)
     return build_request_response(req)
