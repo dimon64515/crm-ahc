@@ -312,3 +312,71 @@ class BackupResponse(BaseModel):
     total_size_mb: int
     parts: int
     files: List[BackupFilePart]
+
+
+# === Request Schemas ===
+
+class RequestPhotoResponse(BaseModel):
+    id: int
+    filename: str
+    original_name: Optional[str]
+    url: str
+    file_size: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RequestCreate(BaseModel):
+    building_id: int
+    description: str = Field(min_length=5)
+
+    @field_validator('description')
+    @classmethod
+    def description_not_empty(cls, v):
+        if not v.strip():
+            raise ValueError('Описание не может быть пустым')
+        return v
+
+
+class RequestAssign(BaseModel):
+    user_id: int
+
+
+class RequestResponse(BaseModel):
+    id: int
+    building: BuildingResponse
+    description: str
+    status: str
+    creator: UserResponse
+    executor: Optional[UserResponse]
+    due_date: date
+    extended_count: int
+    photos: List[RequestPhotoResponse]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RequestListItem(BaseModel):
+    id: int
+    building: BuildingResponse
+    description: str
+    status: str
+    creator: UserResponse
+    executor: Optional[UserResponse]
+    due_date: date
+    extended_count: int
+    photos_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RequestListResponse(BaseModel):
+    items: List[RequestListItem]
+    total: int
