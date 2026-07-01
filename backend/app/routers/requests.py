@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Request, RequestPhoto, Building, User
-from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestListItem, RequestPhotoResponse
-from app.core.dependencies import get_current_user, require_watchman, require_executor
+from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestListItem, RequestPhotoResponse, RequestAssign
+from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
 
@@ -181,3 +181,66 @@ def upload_request_photos(
 
     db.commit()
     return {"success": True, "uploaded": len(uploaded), "photos": uploaded}
+
+
+@router.put("/{request_id}/take", response_model=RequestResponse)
+def take_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executor)
+):
+    req = db.query(Request).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if req.status == "completed":
+        raise HTTPException(status_code=400, detail="Заявка уже завершена")
+
+    req.assigned_to = current_user.id
+    req.status = "in_progress"
+    db.commit()
+    db.refresh(req)
+    return build_request_response(req)
+
+
+@router.put("/{request_id}/assign", response_model=RequestResponse)
+def assign_request(
+    request_id: int,
+    data: RequestAssign,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_director)
+):
+    req = db.query(Request).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if req.status == "completed":
+        raise HTTPException(status_code=400, detail="Заявка уже завершена")
+
+    user = db.query(User).filter(User.id == data.user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
+
+    req.assigned_to = data.user_id
+    req.status = "in_progress"
+    db.commit()
+    db.refresh(req)
+    return build_request_response(req)
+
+
+@router.put("/{request_id}/complete", response_model=RequestResponse)
+def complete_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executor)
+):
+    req = db.query(Request).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if req.status == "completed":
+        raise HTTPException(status_code=400, detail="Заявка уже завершена")
+    if current_user.role == "contractor" and req.assigned_to != current_user.id:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+
+    req.status = "completed"
+    db.commit()
+    db.refresh(req)
+    return build_request_response(req)

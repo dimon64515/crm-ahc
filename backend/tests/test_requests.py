@@ -98,3 +98,112 @@ def test_watchman_can_upload_photo_to_request():
     assert data["uploaded"] == 1
     assert len(data["photos"]) == 1
     db.close()
+
+
+def test_executor_can_take_request():
+    db = TestingSessionLocal()
+    watchman = User(username="watchman_take", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    contractor = User(username="contractor_take", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="12", name="Корпус 12", is_active=True)
+    db.add_all([watchman, contractor, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Взять", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_take", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/take",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "in_progress"
+    assert response.json()["executor"]["id"] == contractor.id
+    db.close()
+
+
+def test_director_can_assign_request():
+    db = TestingSessionLocal()
+    director = User(username="director_assign", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_assign", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    watchman = User(username="watchman_assign", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="13", name="Корпус 13", is_active=True)
+    db.add_all([director, contractor, watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Назначить", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_assign", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/assign",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"user_id": contractor.id},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "in_progress"
+    assert data["executor"]["id"] == contractor.id
+    db.close()
+
+
+def test_contractor_can_complete_own_request():
+    db = TestingSessionLocal()
+    watchman = User(username="watchman_complete", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    contractor = User(username="contractor_complete", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="14", name="Корпус 14", is_active=True)
+    db.add_all([watchman, contractor, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Завершить", status="in_progress", created_by=watchman.id,
+                  assigned_to=contractor.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_complete", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/complete",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
+    db.close()
+
+
+def test_contractor_cannot_complete_alien_request():
+    db = TestingSessionLocal()
+    watchman = User(username="watchman_alien", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    contractor_a = User(username="contractor_a", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    contractor_b = User(username="contractor_b", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="15", name="Корпус 15", is_active=True)
+    db.add_all([watchman, contractor_a, contractor_b, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Чужая", status="in_progress", created_by=watchman.id,
+                  assigned_to=contractor_a.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_b", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/complete",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403, response.text
+    db.close()
