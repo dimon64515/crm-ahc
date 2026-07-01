@@ -13,6 +13,10 @@ export default function Layout({ children }) {
     navItems.push({ to: '/works/new', label: 'Новая работа' });
     navItems.push({ to: '/my-works', label: 'Мои записи' });
   }
+  if (user.role === 'watchman') {
+    navItems.push({ to: '/requests/new', label: 'Новая заявка' });
+    navItems.push({ to: '/my-requests', label: 'Мои заявки' });
+  }
   if (user.role === 'director' || user.role === 'admin') {
     navItems.push({ to: '/dashboard', label: 'Дашборд' });
     navItems.push({ to: '/photo-backup', label: 'Архив фото' });
@@ -54,6 +58,6 @@ export default function Layout({ children }) {
 }
 
 function roleLabel(role) {
-  const map = { contractor: 'Подрядчик', director: 'Директор', admin: 'Админ' };
+  const map = { contractor: 'Подрядчик', watchman: 'Охранник', director: 'Директор', admin: 'Админ' };
   return map[role] || role;
 }

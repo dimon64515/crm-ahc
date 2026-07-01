@@ -124,3 +124,19 @@ export const backupsAPI = {
   remove: (id) => api.delete(`/backups/${id}`),
   delete: (id) => api.delete(`/backups/${id}`),
 };
+
+export const requestsAPI = {
+  create: (data) => api.post('/requests', data),
+  list: (params) => api.get('/requests', { params }),
+  my: () => api.get('/requests/my'),
+  get: (id) => api.get(`/requests/${id}`),
+  take: (id) => api.put(`/requests/${id}/take`),
+  assign: (id, userId) => api.put(`/requests/${id}/assign`, { user_id: userId }),
+  complete: (id) => api.put(`/requests/${id}/complete`),
+  extend: (id) => api.post(`/requests/${id}/extend`),
+  uploadPhotos: (id, files) => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    return api.post(`/requests/${id}/photos`, formData, { headers: { 'Content-Type': undefined } });
+  },
+};

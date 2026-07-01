@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage';
 import WorkDetailPage from './pages/WorkDetailPage';
 import PhotoBackupPage from './pages/PhotoBackupPage';
 import MyWorksPage from './pages/MyWorksPage';
+import RequestNewPage from './pages/RequestNewPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -81,6 +82,16 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
             <Layout>
               <MyWorksPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/requests/new"
+        element={
+          <ProtectedRoute allowedRoles={['watchman']}>
+            <Layout>
+              <RequestNewPage />
             </Layout>
           </ProtectedRoute>
         }
