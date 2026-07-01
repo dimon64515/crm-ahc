@@ -10,6 +10,8 @@ import WorkDetailPage from './pages/WorkDetailPage';
 import PhotoBackupPage from './pages/PhotoBackupPage';
 import MyWorksPage from './pages/MyWorksPage';
 import RequestNewPage from './pages/RequestNewPage';
+import RequestsListPage from './pages/RequestsListPage';
+import RequestDetailPage from './pages/RequestDetailPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -92,6 +94,26 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={['watchman']}>
             <Layout>
               <RequestNewPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/requests"
+        element={
+          <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
+            <Layout>
+              <RequestsListPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/requests/:id"
+        element={
+          <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
+            <Layout>
+              <RequestDetailPage />
             </Layout>
           </ProtectedRoute>
         }

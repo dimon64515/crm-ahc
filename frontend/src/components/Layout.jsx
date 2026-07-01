@@ -12,6 +12,7 @@ export default function Layout({ children }) {
   if (user.role === 'contractor') {
     navItems.push({ to: '/works/new', label: 'Новая работа' });
     navItems.push({ to: '/my-works', label: 'Мои записи' });
+    navItems.push({ to: '/requests', label: 'Заявки' });
   }
   if (user.role === 'watchman') {
     navItems.push({ to: '/requests/new', label: 'Новая заявка' });
@@ -19,6 +20,7 @@ export default function Layout({ children }) {
   }
   if (user.role === 'director' || user.role === 'admin') {
     navItems.push({ to: '/dashboard', label: 'Дашборд' });
+    navItems.push({ to: '/requests', label: 'Заявки' });
     navItems.push({ to: '/photo-backup', label: 'Архив фото' });
   }
   if (user.role === 'admin') {
