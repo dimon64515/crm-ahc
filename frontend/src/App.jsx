@@ -111,7 +111,7 @@ function AppRoutes() {
       <Route
         path="/requests/:id"
         element={
-          <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
+          <ProtectedRoute allowedRoles={['watchman', 'contractor', 'director', 'admin']}>
             <Layout>
               <RequestDetailPage />
             </Layout>
