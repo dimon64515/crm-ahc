@@ -6,6 +6,7 @@ import os
 from app.core.config import get_settings
 from app.database import engine, Base
 from app.routers import auth, users, buildings, services, materials, works, reports, backups
+from app.routers import requests as requests_router
 
 settings = get_settings()
 
@@ -41,6 +42,7 @@ app.include_router(materials.router, prefix="/api")
 app.include_router(works.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(backups.router, prefix="/api")
+app.include_router(requests_router.router, prefix="/api")
 
 
 @app.get("/api/health")
