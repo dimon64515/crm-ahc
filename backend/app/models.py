@@ -152,3 +152,38 @@ class BackupLog(Base):
     status = Column(String(20), default="completed")
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime)
+
+
+class Request(Base):
+    __tablename__ = "requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    building_id = Column(Integer, ForeignKey("buildings.id"), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="new")
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    due_date = Column(Date, nullable=False)
+    extended_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    building = relationship("Building")
+    creator = relationship("User", foreign_keys=[created_by])
+    executor = relationship("User", foreign_keys=[assigned_to])
+    photos = relationship("RequestPhoto", back_populates="request", cascade="all, delete-orphan")
+
+
+class RequestPhoto(Base):
+    __tablename__ = "request_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(Integer, ForeignKey("requests.id", ondelete="CASCADE"), nullable=False)
+    filename = Column(String(255), nullable=False)
+    original_name = Column(String(255))
+    file_path = Column(String(500), nullable=False)
+    file_size = Column(Integer)
+    mime_type = Column(String(50))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    request = relationship("Request", back_populates="photos")
