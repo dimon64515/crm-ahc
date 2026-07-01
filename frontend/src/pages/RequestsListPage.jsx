@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, buildingsAPI, usersAPI } from '../api';
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'Все статусы' },
-  { value: 'new', label: 'Новая' },
-  { value: 'in_progress', label: 'В работе' },
-  { value: 'completed', label: 'Завершена' },
+const STATUS_BUTTONS = [
+  { value: '', label: 'Все', style: { background: '#f3f4f6', color: '#374151', borderColor: '#d1d5db' } },
+  { value: 'new', label: 'Новые', style: { background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' } },
+  { value: 'in_progress', label: 'В работе', style: { background: '#fffbeb', color: '#d97706', borderColor: '#fde68a' } },
+  { value: 'completed', label: 'Завершены', style: { background: '#f0fdf4', color: '#059669', borderColor: '#bbf7d0' } },
 ];
 
 const statusLabel = (status) => {
@@ -128,15 +128,27 @@ export default function RequestsListPage() {
       </div>
 
       <div style={styles.filters}>
-        <select
-          value={filters.status}
-          onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-          style={styles.filterInput}
-        >
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
+        <div style={styles.statusButtons}>
+          {STATUS_BUTTONS.map((s) => {
+            const active = filters.status === s.value;
+            return (
+              <button
+                key={s.value}
+                onClick={() => setFilters({ ...filters, status: s.value })}
+                style={{
+                  ...styles.statusBtn,
+                  background: s.style.background,
+                  color: s.style.color,
+                  borderColor: s.style.borderColor,
+                  fontWeight: active ? 700 : 500,
+                  boxShadow: active ? 'inset 0 0 0 1px ' + s.style.color : 'none',
+                }}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
         <select
           value={filters.building_id}
           onChange={(e) => setFilters({ ...filters, building_id: e.target.value })}
@@ -248,7 +260,9 @@ export default function RequestsListPage() {
 const styles = {
   header: { marginBottom: '20px' },
   title: { fontSize: '22px', fontWeight: 700, letterSpacing: '-0.025em' },
-  filters: { display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' },
+  filters: { display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
+  statusButtons: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
+  statusBtn: { padding: '8px 14px', borderRadius: '999px', border: '1px solid', fontSize: '14px', cursor: 'pointer', transition: 'all 0.15s ease' },
   filterInput: { padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', minWidth: '180px' },
   error: { padding: '12px 16px', background: '#fef2f2', color: '#b91c1c', borderRadius: '8px', marginBottom: '16px' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },

@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { worksAPI, reportsAPI, buildingsAPI, servicesAPI, usersAPI } from '../api';
+import { worksAPI, reportsAPI, buildingsAPI, servicesAPI, usersAPI, requestsAPI } from '../api';
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('detailed');
+  const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
     if (!user || user.role === 'contractor') {
@@ -29,6 +29,14 @@ export default function DashboardPage() {
       <div style={styles.tabs} role="tablist" aria-label="Виды отчётов">
         <button
           role="tab"
+          aria-selected={activeTab === 'requests'}
+          style={{ ...styles.tab, ...(activeTab === 'requests' ? styles.activeTab : {}) }}
+          onClick={() => setActiveTab('requests')}
+        >
+          Заявки
+        </button>
+        <button
+          role="tab"
           aria-selected={activeTab === 'detailed'}
           style={{ ...styles.tab, ...(activeTab === 'detailed' ? styles.activeTab : {}) }}
           onClick={() => setActiveTab('detailed')}
@@ -45,6 +53,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {activeTab === 'requests' && <RequestsDashboard />}
       {activeTab === 'detailed' && <DetailedReport />}
       {activeTab === 'summary' && <SummaryReport />}
     </div>
@@ -346,6 +355,168 @@ function SummaryReport() {
     </div>
   );
 }
+
+function RequestsDashboard() {
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterBuilding, setFilterBuilding] = useState('');
+
+  const statusLabel = { new: 'Новая', in_progress: 'В работе', completed: 'Завершена' };
+  const statusStyle = {
+    new: { background: '#eff6ff', color: '#2563eb' },
+    in_progress: { background: '#fffbeb', color: '#d97706' },
+    completed: { background: '#f0fdf4', color: '#059669' },
+  };
+  const statusButtons = [
+    { value: '', label: 'Все', color: '#374151', bg: '#f3f4f6' },
+    { value: 'new', label: 'Новые', color: '#2563eb', bg: '#eff6ff' },
+    { value: 'in_progress', label: 'В работе', color: '#d97706', bg: '#fffbeb' },
+    { value: 'completed', label: 'Завершены', color: '#059669', bg: '#f0fdf4' },
+  ];
+
+  useEffect(() => {
+    buildingsAPI.list({ is_active: true }).then(r => setBuildings(r.data || [])).catch(() => setBuildings([]));
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {};
+      if (filterStatus) params.status = filterStatus;
+      if (filterBuilding) params.building_id = filterBuilding;
+      const res = await requestsAPI.list(params);
+      setItems(res.data.items || []);
+    } catch (e) {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterStatus, filterBuilding]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const counts = useMemo(() => {
+    const total = items.length;
+    const newCount = items.filter(r => r.status === 'new').length;
+    const inProgress = items.filter(r => r.status === 'in_progress').length;
+    const completed = items.filter(r => r.status === 'completed').length;
+    const overdue = items.filter(r => r.status !== 'completed' && r.due_date && new Date(r.due_date) < new Date(new Date().setHours(0,0,0,0))).length;
+    return { total, new: newCount, in_progress: inProgress, completed, overdue };
+  }, [items]);
+
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+  const isOverdue = (r) => r.status !== 'completed' && r.due_date && new Date(r.due_date) < new Date(new Date().setHours(0,0,0,0));
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ ...dashStyles.card, background: '#f3f4f6' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#374151' }}>{counts.total}</div>
+          <div style={{ fontSize: '13px', color: '#6b7280' }}>Всего заявок</div>
+        </div>
+        <div style={{ ...dashStyles.card, background: '#eff6ff' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#2563eb' }}>{counts.new}</div>
+          <div style={{ fontSize: '13px', color: '#2563eb' }}>Новые</div>
+        </div>
+        <div style={{ ...dashStyles.card, background: '#fffbeb' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#d97706' }}>{counts.in_progress}</div>
+          <div style={{ fontSize: '13px', color: '#d97706' }}>В работе</div>
+        </div>
+        <div style={{ ...dashStyles.card, background: '#f0fdf4' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#059669' }}>{counts.completed}</div>
+          <div style={{ fontSize: '13px', color: '#059669' }}>Завершены</div>
+        </div>
+        <div style={{ ...dashStyles.card, background: counts.overdue ? '#fef2f2' : '#f3f4f6' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: counts.overdue ? '#dc2626' : '#374151' }}>{counts.overdue}</div>
+          <div style={{ fontSize: '13px', color: counts.overdue ? '#dc2626' : '#6b7280' }}>Просрочено</div>
+        </div>
+      </div>
+
+      <div style={styles.filters}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {statusButtons.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setFilterStatus(s.value)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '999px',
+                border: '1px solid ' + (filterStatus === s.value ? s.color : 'transparent'),
+                background: s.bg,
+                color: s.color,
+                fontSize: '14px',
+                fontWeight: filterStatus === s.value ? 700 : 500,
+                cursor: 'pointer',
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <select
+          value={filterBuilding}
+          onChange={(e) => setFilterBuilding(e.target.value)}
+          style={styles.filterInput}
+        >
+          <option value="">Все корпуса</option>
+          {buildings.map(b => <option key={b.id} value={b.id}>{b.number} — {b.name}</option>)}
+        </select>
+        <button onClick={() => navigate('/requests')} style={styles.filterBtn}>Перейти к заявкам →</button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Загрузка…</div>
+      ) : items.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Заявки не найдены</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Корпус</th>
+                <th>Описание</th>
+                <th>Статус</th>
+                <th>Исполнитель</th>
+                <th>Срок</th>
+                <th style={{ textAlign: 'right' }}>Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.slice(0, 10).map((r) => (
+                <tr key={r.id}>
+                  <td className="tabular-nums">{r.id}</td>
+                  <td>{r.building?.name || r.building?.number || '—'}</td>
+                  <td style={{ maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.description}>{r.description || '—'}</td>
+                  <td>
+                    <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, ...statusStyle[r.status] }}>
+                      {statusLabel[r.status] || r.status}
+                    </span>
+                  </td>
+                  <td>{r.executor?.full_name || r.executor?.username || '—'}</td>
+                  <td className="tabular-nums" style={isOverdue(r) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(r.due_date)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button onClick={() => navigate(`/requests/${r.id}`)} style={styles.filterBtn}>Открыть</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length > 10 && (
+            <div style={{ textAlign: 'center', marginTop: '12px', color: '#6b7280', fontSize: '13px' }}>Показано 10 из {items.length}. Все заявки — на странице «Заявки».</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const dashStyles = {
+  card: { padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+};
 
 const styles = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
