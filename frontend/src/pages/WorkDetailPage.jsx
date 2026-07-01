@@ -140,9 +140,7 @@ export default function WorkDetailPage() {
       const materialsPayload = (edited.materials || [])
         .filter(m => m.material_id && m.quantity)
         .map(m => ({ material_id: parseInt(m.material_id), quantity: parseFloat(String(m.quantity).replace(',', '.')) }));
-      if (materialsPayload.length > 0 || (work.materials || []).length > 0) {
-        payload.materials = materialsPayload;
-      }
+      payload.materials = materialsPayload;
     }
 
     if (Object.keys(payload).length === 0) {

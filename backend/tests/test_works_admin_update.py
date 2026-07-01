@@ -262,3 +262,59 @@ def test_contractor_update_ignores_admin_fields():
     assert data["building"]["number"] == "30"
     assert data["service"]["name"] == "Услуга A"
     db.close()
+
+
+def test_admin_partial_update_preserves_materials():
+    """Регрессионный тест: частичное обновление админом не должно удалять материалы."""
+    db = TestingSessionLocal()
+    admin = User(username="admin_partial", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor_partial", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="50", name="Корпус 50", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    material = Material(name="Материал", unit="шт", price=Decimal("50.00"), is_active=True)
+    db.add_all([admin, contractor, building, service, material])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Старое описание",
+        service_quantity=Decimal("2.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("200.00"),
+        materials_total_price=Decimal("100.00"),
+        total_price=Decimal("300.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    work_material = WorkMaterial(
+        work_id=work.id,
+        material_id=material.id,
+        quantity=Decimal("2.00"),
+        unit_price=Decimal("50.00"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work_material)
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "admin_partial", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Новое описание"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["description"] == "Новое описание"
+    assert len(data["materials"]) == 1
+    assert data["materials"][0]["material_id"] == material.id
+    assert Decimal(data["materials"][0]["total_price"]) == Decimal("100.00")
+    assert Decimal(data["materials_total_price"]) == Decimal("100.00")
+    assert Decimal(data["total_price"]) == Decimal("300.00")
+    db.close()

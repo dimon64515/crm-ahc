@@ -188,7 +188,7 @@ class WorkUpdateAdmin(WorkUpdate):
     building_id: Optional[int] = None
     service_id: Optional[int] = None
     user_id: Optional[int] = None
-    materials: List[WorkMaterialCreate] = []
+    materials: Optional[List[WorkMaterialCreate]] = None
 
 
 class WorkResponse(BaseModel):
