@@ -36,7 +36,7 @@ export default function RequestsListPage() {
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
-  const canExtend = user?.role === 'admin';
+  const canExtend = (req) => user?.role === 'admin' && req.status !== 'completed';
 
   const loadBuildings = async () => {
     try {
@@ -50,7 +50,7 @@ export default function RequestsListPage() {
   const loadUsers = async () => {
     try {
       const res = await usersAPI.list({ per_page: 1000 });
-      setUsers((res.data.items || []).filter((u) => u.is_active));
+      setUsers((res.data.items || []).filter((u) => u.is_active && ['contractor', 'director', 'admin'].includes(u.role)));
     } catch (e) {
       setUsers([]);
     }
@@ -216,7 +216,7 @@ export default function RequestsListPage() {
                         ))}
                       </select>
                     )}
-                    {canExtend && (
+                    {canExtend(req) && (
                       <button
                         onClick={() => handleAction(requestsAPI.extend, req.id)}
                         disabled={actionId === req.id}

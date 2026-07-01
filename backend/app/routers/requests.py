@@ -3,11 +3,11 @@ from datetime import date, timedelta, datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models import Request, RequestPhoto, Building, User
-from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestListItem, RequestPhotoResponse, RequestAssign
+from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign
 from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
@@ -109,15 +109,28 @@ def list_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_executor)
 ):
-    query = db.query(Request)
+    query = db.query(Request).options(
+        joinedload(Request.building),
+        joinedload(Request.creator),
+        joinedload(Request.executor),
+        selectinload(Request.photos),
+    )
     if status:
         query = query.filter(Request.status == status)
     if building_id:
         query = query.filter(Request.building_id == building_id)
     if date_from:
-        query = query.filter(Request.created_at >= date_from)
+        try:
+            date_from_parsed = datetime.strptime(date_from, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неверный формат date_from, ожидается YYYY-MM-DD")
+        query = query.filter(Request.created_at >= datetime.combine(date_from_parsed, datetime.min.time()))
     if date_to:
-        query = query.filter(Request.created_at <= date_to)
+        try:
+            date_to_parsed = datetime.strptime(date_to, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неверный формат date_to, ожидается YYYY-MM-DD")
+        query = query.filter(Request.created_at <= datetime.combine(date_to_parsed, datetime.max.time()))
 
     items = query.order_by(Request.created_at.desc()).all()
     return {
@@ -131,7 +144,12 @@ def list_my_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_watchman)
 ):
-    items = db.query(Request).filter(Request.created_by == current_user.id).order_by(Request.created_at.desc()).all()
+    items = db.query(Request).options(
+        joinedload(Request.building),
+        joinedload(Request.creator),
+        joinedload(Request.executor),
+        selectinload(Request.photos),
+    ).filter(Request.created_by == current_user.id).order_by(Request.created_at.desc()).all()
     return {
         "items": [build_request_list_item(r) for r in items],
         "total": len(items),
@@ -144,7 +162,12 @@ def get_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    req = db.query(Request).filter(Request.id == request_id).first()
+    req = db.query(Request).options(
+        joinedload(Request.building),
+        joinedload(Request.creator),
+        joinedload(Request.executor),
+        selectinload(Request.photos),
+    ).filter(Request.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
@@ -192,8 +215,8 @@ def take_request(
     req = db.query(Request).filter(Request.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    if req.status == "completed":
-        raise HTTPException(status_code=400, detail="Заявка уже завершена")
+    if req.status != "new":
+        raise HTTPException(status_code=400, detail="Взять в работу можно только новую заявку")
 
     req.assigned_to = current_user.id
     req.status = "in_progress"
@@ -218,6 +241,8 @@ def assign_request(
     user = db.query(User).filter(User.id == data.user_id, User.is_active == True).first()
     if not user:
         raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
+    if user.role not in ("contractor", "director", "admin"):
+        raise HTTPException(status_code=400, detail="Назначать заявку можно только на исполнителя")
 
     req.assigned_to = data.user_id
     req.status = "in_progress"
@@ -255,6 +280,8 @@ def extend_request(
     req = db.query(Request).filter(Request.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if req.status == "completed":
+        raise HTTPException(status_code=400, detail="Нельзя продлить завершённую заявку")
 
     req.due_date = req.due_date + timedelta(days=5)
     req.extended_count += 1

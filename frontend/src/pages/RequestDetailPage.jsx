@@ -57,7 +57,7 @@ export default function RequestDetailPage() {
   const loadUsers = useCallback(async () => {
     try {
       const res = await usersAPI.list({ per_page: 1000 });
-      setUsers((res.data.items || []).filter((u) => u.is_active));
+      setUsers((res.data.items || []).filter((u) => u.is_active && ['contractor', 'director', 'admin'].includes(u.role)));
     } catch (e) {
       setUsers([]);
     }

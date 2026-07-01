@@ -60,6 +60,6 @@ export default function Layout({ children }) {
 }
 
 function roleLabel(role) {
-  const map = { contractor: 'Подрядчик', watchman: 'Охранник', director: 'Директор', admin: 'Админ' };
+  const map = { contractor: 'Подрядчик', watchman: 'Вахтёр', director: 'Директор', admin: 'Админ' };
   return map[role] || role;
 }

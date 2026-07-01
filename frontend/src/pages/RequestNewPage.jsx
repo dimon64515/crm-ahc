@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildingsAPI, requestsAPI } from '../api';
 
@@ -9,7 +9,6 @@ export default function RequestNewPage() {
   const [description, setDescription] = useState('');
   const [photos, setPhotos] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-  const photoInputRef = useRef(null);
 
   useEffect(() => {
     buildingsAPI.list({ is_active: true }).then(r => setBuildings(r.data));
@@ -49,7 +48,7 @@ export default function RequestNewPage() {
         </div>
         <div style={styles.field}>
           <label style={styles.label}>Фото (до 5)</label>
-          <input type="file" accept="image/*" multiple ref={photoInputRef}
+          <input type="file" accept="image/*" multiple
             onChange={e => setPhotos(Array.from(e.target.files).slice(0, 5))} style={styles.input} />
           {photos.length > 0 && <p>Выбрано фото: {photos.length}</p>}
         </div>

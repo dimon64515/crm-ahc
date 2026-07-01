@@ -20,6 +20,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Загрузка...</div>;
   if (!user) return <Navigate to="/login" />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (user.role === 'watchman') return <Navigate to="/requests/new" />;
     return user.role === 'contractor' ? <Navigate to="/works/new" /> : <Navigate to="/dashboard" />;
   }
   return children;
