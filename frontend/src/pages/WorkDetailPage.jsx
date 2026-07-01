@@ -137,10 +137,22 @@ export default function WorkDetailPage() {
       if (edited.user_id && edited.user_id !== work.created_by?.id) {
         payload.user_id = parseInt(edited.user_id);
       }
+
+      // Материалы отправляем только если список действительно изменился,
+      // чтобы бэкенд не пересчитывал цены из справочника при правках описания/даты/количества.
       const materialsPayload = (edited.materials || [])
         .filter(m => m.material_id && m.quantity)
         .map(m => ({ material_id: parseInt(m.material_id), quantity: parseFloat(String(m.quantity).replace(',', '.')) }));
-      payload.materials = materialsPayload;
+      const originalMaterials = (work.materials || [])
+        .map(m => ({ material_id: parseInt(m.material_id), quantity: parseFloat(String(m.quantity).replace(',', '.')) }));
+      const materialsChanged = materialsPayload.length !== originalMaterials.length ||
+        materialsPayload.some((m, idx) => {
+          const orig = originalMaterials[idx];
+          return !orig || m.material_id !== orig.material_id || m.quantity !== orig.quantity;
+        });
+      if (materialsChanged) {
+        payload.materials = materialsPayload;
+      }
     }
 
     if (Object.keys(payload).length === 0) {
