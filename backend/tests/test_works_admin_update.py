@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
-from app.models import User, Building, Service, Material, Work
+from app.models import User, Building, Service, Material, Work, WorkMaterial
 from app.core.security import get_password_hash
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -132,6 +132,52 @@ def test_admin_update_service_and_materials_recalculates_prices():
     assert Decimal(data["materials_total_price"]) == Decimal("130.00")
     assert Decimal(data["total_price"]) == Decimal("2130.00")
     assert len(data["materials"]) == 2
+    db.close()
+
+
+def test_admin_can_clear_all_materials():
+    db = TestingSessionLocal()
+    admin = User(username="admin3", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor5", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="40", name="Корпус 40", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    material = Material(name="Материал", unit="шт", price=Decimal("50.00"), is_active=True)
+    db.add_all([admin, contractor, building, service, material])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("2.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("200.00"),
+        materials_total_price=Decimal("100.00"),
+        total_price=Decimal("300.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    work_material = WorkMaterial(work_id=work.id, material_id=material.id, quantity=Decimal("2.00"), unit_price=Decimal("50.00"), total_price=Decimal("100.00"))
+    db.add(work_material)
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "admin3", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"materials": []},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert len(data["materials"]) == 0
+    assert Decimal(data["materials_total_price"]) == Decimal("0")
+    assert Decimal(data["total_price"]) == Decimal("200.00")
     db.close()
 
 

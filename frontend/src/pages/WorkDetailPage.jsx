@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { worksAPI, buildingsAPI, servicesAPI, usersAPI, materialsAPI } from '../api';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,20 +43,27 @@ export default function WorkDetailPage() {
         user_id: res.data.created_by?.id || '',
         materials: (res.data.materials || []).map(m => ({ material_id: m.material_id, quantity: m.quantity })),
       });
-    } catch (e) {
-      console.error(e);
+    } catch {
       setWork(null);
     } finally {
       setLoading(false);
     }
   }, [id]);
 
-  const loadBuildings = useCallback(async () => { try { const res = await buildingsAPI.list({ is_active: true }); setBuildings(res.data); } catch (e) { console.error(e); } }, []);
-  const loadServices = useCallback(async () => { try { const res = await servicesAPI.list(); setServices(res.data.items || []); } catch (e) { console.error(e); } }, []);
-  const loadContractors = useCallback(async () => { try { const res = await usersAPI.list({ role: 'contractor' }); setContractors(res.data.items || []); } catch (e) { console.error(e); } }, []);
-  const loadMaterials = useCallback(async () => { try { const res = await materialsAPI.list(); setAllMaterials(res.data.items || []); } catch (e) { console.error(e); } }, []);
+  const loadBuildings = useCallback(async () => { try { const res = await buildingsAPI.list({ is_active: true }); setBuildings(res.data); } catch {} }, []);
+  const loadServices = useCallback(async () => { try { const res = await servicesAPI.list(); setServices(res.data.items || []); } catch {} }, []);
+  const loadContractors = useCallback(async () => { try { const res = await usersAPI.list({ role: 'contractor' }); setContractors(res.data.items || []); } catch {} }, []);
+  const loadMaterials = useCallback(async () => { try { const res = await materialsAPI.list(); setAllMaterials(res.data.items || []); } catch {} }, []);
 
-  useEffect(() => { loadWork(); loadBuildings(); loadServices(); loadContractors(); loadMaterials(); }, [loadWork, loadBuildings, loadServices, loadContractors, loadMaterials]);
+  useEffect(() => {
+    loadWork();
+    if (user?.role === 'admin') {
+      loadBuildings();
+      loadServices();
+      loadContractors();
+      loadMaterials();
+    }
+  }, [loadWork, user, loadBuildings, loadServices, loadContractors, loadMaterials]);
 
   const canEdit = user.role === 'admin' || (user.role === 'contractor' && work?.created_by?.id === user.id);
 
@@ -64,20 +71,20 @@ export default function WorkDetailPage() {
     if (!window.confirm('Удалить запись?')) return;
     setDeleting(true);
     try { await worksAPI.remove(id); navigate('/dashboard'); }
-    catch (e) { console.error(e); alert('Ошибка удаления'); }
+    catch { alert('Ошибка удаления'); }
     finally { setDeleting(false); }
   };
 
   const handleDeletePhoto = async (photoId) => {
     if (!window.confirm('Удалить фото?')) return;
     try { await worksAPI.deletePhoto(id, photoId); loadWork(); }
-    catch (e) { console.error(e); alert('Ошибка удаления фото'); }
+    catch { alert('Ошибка удаления фото'); }
   };
 
   const handleDeleteFile = async (fileId) => {
     if (!window.confirm('Удалить файл?')) return;
     try { await worksAPI.deleteFile(id, fileId); loadWork(); }
-    catch (e) { console.error(e); alert('Ошибка удаления файла'); }
+    catch { alert('Ошибка удаления файла'); }
   };
 
   const handlePriceEdit = async (type, newPrice, materialId = null) => {
@@ -90,7 +97,7 @@ export default function WorkDetailPage() {
       }
       await worksAPI.updatePrices(id, prices);
       loadWork();
-    } catch (e) { console.error(e); alert('Ошибка обновления цен'); }
+    } catch { alert('Ошибка обновления цен'); }
   };
 
   const handleUpdateWork = async () => {
@@ -143,13 +150,11 @@ export default function WorkDetailPage() {
       return;
     }
 
-    console.log('[WorkDetail] update payload:', payload);
     try {
       await worksAPI.update(id, payload);
       setEditMode(false);
       loadWork();
     } catch (e) {
-      console.error('[WorkDetail] update error:', e.response?.data);
       const data = e.response?.data;
       let msg = 'Ошибка сохранения';
       if (data) {
@@ -174,7 +179,7 @@ export default function WorkDetailPage() {
     try {
       await worksAPI.uploadPhotos(id, files);
       loadWork();
-    } catch (err) { console.error(err); alert('Ошибка загрузки фото'); }
+    } catch { alert('Ошибка загрузки фото'); }
     finally { setUploading(false); e.target.value = ''; }
   };
 
@@ -185,7 +190,7 @@ export default function WorkDetailPage() {
     try {
       await worksAPI.uploadFiles(id, files);
       loadWork();
-    } catch (err) { console.error(err); alert('Ошибка загрузки файлов'); }
+    } catch { alert('Ошибка загрузки файлов'); }
     finally { setUploading(false); e.target.value = ''; }
   };
 
@@ -305,9 +310,8 @@ export default function WorkDetailPage() {
                 <div style={{ ...styles.field, flex: 2 }}>
                   <label style={styles.label}>Материал</label>
                   <select value={m.material_id} onChange={e => {
-                    const materials = [...edited.materials];
-                    materials[idx].material_id = parseInt(e.target.value);
-                    setEdited({ ...edited, materials });
+                    const value = parseInt(e.target.value);
+                    setEdited({ ...edited, materials: edited.materials.map((item, i) => i === idx ? { ...item, material_id: value } : item) });
                   }} style={styles.input}>
                     <option value="">Выберите материал</option>
                     {allMaterials.map(mat => <option key={mat.id} value={mat.id}>{mat.name} ({mat.unit})</option>)}
@@ -316,9 +320,7 @@ export default function WorkDetailPage() {
                 <div style={styles.field}>
                   <label style={styles.label}>Кол-во</label>
                   <input type="number" min="0" step="0.01" value={m.quantity} onChange={e => {
-                    const materials = [...edited.materials];
-                    materials[idx].quantity = e.target.value;
-                    setEdited({ ...edited, materials });
+                    setEdited({ ...edited, materials: edited.materials.map((item, i) => i === idx ? { ...item, quantity: e.target.value } : item) });
                   }} style={styles.input} />
                 </div>
                 <button onClick={() => setEdited({ ...edited, materials: edited.materials.filter((_, i) => i !== idx) })} style={styles.dangerBtn}>Удалить</button>

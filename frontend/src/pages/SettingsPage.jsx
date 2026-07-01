@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { usersAPI, buildingsAPI, servicesAPI, materialsAPI, backupsAPI } from '../api';
 
 const tabs = [
@@ -10,6 +11,7 @@ const tabs = [
 ];
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
 
   return (

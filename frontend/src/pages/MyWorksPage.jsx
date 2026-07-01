@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { worksAPI } from '../api';
 
@@ -6,6 +6,7 @@ export default function MyWorksPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadingId, setUploadingId] = useState(null);
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => { load(); }, []);

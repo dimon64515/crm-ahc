@@ -260,7 +260,7 @@ def update_work(
                 raise HTTPException(status_code=404, detail="Пользователь не найден")
             work.user_id = data.user_id
 
-        if data.materials:
+        if data.materials is not None:
             material_ids = [m.material_id for m in data.materials]
             if len(material_ids) != len(set(material_ids)):
                 raise HTTPException(status_code=400, detail="Материалы не должны дублироваться")
