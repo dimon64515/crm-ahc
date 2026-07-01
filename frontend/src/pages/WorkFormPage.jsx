@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import Select, { components } from 'react-select';
+import Select from 'react-select';
 import AsyncSelect from 'react-select/async';
 import { buildingsAPI, servicesAPI, materialsAPI, worksAPI } from '../api';
 
 export default function WorkFormPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
@@ -55,11 +53,6 @@ export default function WorkFormPage() {
   useEffect(() => {
     setServiceTotal(parseFloat(serviceQuantity || 0) * parseFloat(servicePrice || 0));
   }, [serviceQuantity, servicePrice]);
-
-  useEffect(() => {
-    const total = materials.reduce((sum, m) => sum + parseFloat(m.total || 0), 0);
-    // materials total updated inline
-  }, [materials]);
 
   useEffect(() => {
     const timer = setInterval(() => { saveDraft(); }, 30000);
@@ -242,7 +235,7 @@ export default function WorkFormPage() {
         const detail = err.response?.data;
         console.error('[WorkForm] error detail:', detail);
         msg = formatError(detail) || msg;
-      } catch (_) {}
+      } catch (e) { console.error(e); }
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -355,7 +348,7 @@ export default function WorkFormPage() {
             <h3 style={styles.sectionTitle}>Материалы</h3>
             <button type="button" onClick={addMaterialRow} style={styles.addBtn}>+ Добавить</button>
           </div>
-          {materials.map((m, idx) => (
+          {materials.map((m) => (
             <div key={m.id} style={styles.materialRow}>
               <div style={{ flex: 2, minWidth: '200px' }}>
                 <AsyncSelect
