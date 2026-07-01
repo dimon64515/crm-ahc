@@ -265,6 +265,16 @@ def update_work(
             if len(material_ids) != len(set(material_ids)):
                 raise HTTPException(status_code=400, detail="Материалы не должны дублироваться")
 
+            # Валидация всех запрошенных материалов перед удалением старых
+            materials = db.query(Material).filter(Material.id.in_(material_ids)).all()
+            found_ids = {m.id for m in materials}
+            for material_id in material_ids:
+                if material_id not in found_ids:
+                    raise HTTPException(status_code=400, detail=f"Материал с id {material_id} не найден")
+            for material in materials:
+                if not material.is_active:
+                    raise HTTPException(status_code=400, detail=f"Материал с id {material.id} неактивен")
+
             # Удаляем старые материалы
             for wm in work.work_materials:
                 db.delete(wm)
@@ -272,9 +282,7 @@ def update_work(
 
             materials_total = Decimal('0')
             for mat_data in data.materials:
-                material = db.query(Material).filter(Material.id == mat_data.material_id, Material.is_active == True).first()
-                if not material:
-                    continue
+                material = next(m for m in materials if m.id == mat_data.material_id)
                 mat_total = mat_data.quantity * material.price
                 work_material = WorkMaterial(
                     work_id=work.id,

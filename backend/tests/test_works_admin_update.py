@@ -318,3 +318,108 @@ def test_admin_partial_update_preserves_materials():
     assert Decimal(data["materials_total_price"]) == Decimal("100.00")
     assert Decimal(data["total_price"]) == Decimal("300.00")
     db.close()
+
+
+def test_admin_update_inactive_material_returns_400_and_preserves_materials():
+    """Регрессионный тест: обновление с неактивным material_id должно вернуть 400 и оставить старые материалы."""
+    db = TestingSessionLocal()
+    admin = User(username="admin_inactive", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor_inactive", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="60", name="Корпус 60", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    active_material = Material(name="Активный материал", unit="шт", price=Decimal("50.00"), is_active=True)
+    inactive_material = Material(name="Неактивный материал", unit="шт", price=Decimal("30.00"), is_active=False)
+    db.add_all([admin, contractor, building, service, active_material, inactive_material])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("2.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("200.00"),
+        materials_total_price=Decimal("100.00"),
+        total_price=Decimal("300.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    work_material = WorkMaterial(
+        work_id=work.id,
+        material_id=active_material.id,
+        quantity=Decimal("2.00"),
+        unit_price=Decimal("50.00"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work_material)
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "admin_inactive", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "materials": [
+                {"material_id": active_material.id, "quantity": "1.00"},
+                {"material_id": inactive_material.id, "quantity": "1.00"},
+            ],
+        },
+    )
+    assert response.status_code == 400, response.text
+
+    # Проверяем, что существующие материалы не изменились
+    db.refresh(work)
+    assert len(work.work_materials) == 1
+    assert work.work_materials[0].material_id == active_material.id
+    assert Decimal(work.work_materials[0].total_price) == Decimal("100.00")
+    db.close()
+
+
+def test_admin_update_duplicate_material_returns_400():
+    """Регрессионный тест: обновление с дублирующимся material_id должно вернуть 400."""
+    db = TestingSessionLocal()
+    admin = User(username="admin_dup", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    contractor = User(username="contractor_dup", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="70", name="Корпус 70", is_active=True)
+    service = Service(name="Услуга", unit="м2", price=Decimal("100.00"), is_active=True)
+    material = Material(name="Материал", unit="шт", price=Decimal("50.00"), is_active=True)
+    db.add_all([admin, contractor, building, service, material])
+    db.commit()
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        service_id=service.id,
+        work_date=date(2026, 6, 1),
+        description="Описание",
+        service_quantity=Decimal("1.00"),
+        service_unit_price=Decimal("100.00"),
+        service_total_price=Decimal("100.00"),
+        materials_total_price=Decimal("0"),
+        total_price=Decimal("100.00"),
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    login = client.post("/api/auth/login", json={"username": "admin_dup", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/works/{work.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "materials": [
+                {"material_id": material.id, "quantity": "1.00"},
+                {"material_id": material.id, "quantity": "2.00"},
+            ],
+        },
+    )
+    assert response.status_code == 400, response.text
+    db.close()
