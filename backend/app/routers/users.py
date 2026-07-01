@@ -5,7 +5,7 @@ from typing import List
 from app.database import get_db
 from app.models import User
 from app.schemas import UserCreate, UserResponse
-from app.core.dependencies import require_admin
+from app.core.dependencies import require_admin, require_director
 from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -18,7 +18,7 @@ def list_users(
     page: int = 1,
     per_page: int = 20,
     db: Session = Depends(get_db),
-    admin = Depends(require_admin)
+    current_user = Depends(require_director)
 ):
     query = db.query(User)
     if role:
