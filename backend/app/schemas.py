@@ -184,6 +184,13 @@ class WorkUpdate(BaseModel):
         return v
 
 
+class WorkUpdateAdmin(WorkUpdate):
+    building_id: Optional[int] = None
+    service_id: Optional[int] = None
+    user_id: Optional[int] = None
+    materials: List[WorkMaterialCreate] = []
+
+
 class WorkResponse(BaseModel):
     id: int
     building: BuildingResponse

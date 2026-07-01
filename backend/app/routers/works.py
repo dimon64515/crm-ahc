@@ -8,7 +8,7 @@ from app.models import Work, WorkPhoto, WorkFile, WorkMaterial, Building, Servic
 from app.schemas import (
     WorkCreate, WorkResponse, WorkListResponse, WorkListItem,
     WorkPhotoResponse, WorkFileResponse, WorkMaterialResponse,
-    WorkUpdatePrices, WorkUpdate
+    WorkUpdatePrices, WorkUpdate, WorkUpdateAdmin
 )
 from app.core.dependencies import get_current_user, require_contractor, require_director, require_admin
 from app.services.file_service import save_photo, save_work_file, delete_file, get_file_url
