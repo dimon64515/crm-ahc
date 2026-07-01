@@ -226,29 +226,79 @@ def get_work(
 @router.put("/{work_id}", response_model=WorkResponse)
 def update_work(
     work_id: int,
-    data: WorkUpdate,
+    data: WorkUpdateAdmin,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
-    
+
     if current_user.role == 'director':
         raise HTTPException(status_code=403, detail="Недостаточно прав")
     if current_user.role == 'contractor' and work.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
-    
+
+    if current_user.role == 'admin':
+        # Полное редактирование для администратора
+        if data.building_id is not None:
+            building = db.query(Building).filter(Building.id == data.building_id).first()
+            if not building:
+                raise HTTPException(status_code=404, detail="Корпус не найден")
+            work.building_id = data.building_id
+
+        if data.service_id is not None:
+            service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
+            if not service:
+                raise HTTPException(status_code=404, detail="Вид работы не найден")
+            work.service_id = data.service_id
+            work.service_unit_price = service.price
+
+        if data.user_id is not None:
+            user = db.query(User).filter(User.id == data.user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Пользователь не найден")
+            work.user_id = data.user_id
+
+        if data.materials:
+            material_ids = [m.material_id for m in data.materials]
+            if len(material_ids) != len(set(material_ids)):
+                raise HTTPException(status_code=400, detail="Материалы не должны дублироваться")
+
+            # Удаляем старые материалы
+            for wm in work.work_materials:
+                db.delete(wm)
+            db.flush()
+
+            materials_total = Decimal('0')
+            for mat_data in data.materials:
+                material = db.query(Material).filter(Material.id == mat_data.material_id, Material.is_active == True).first()
+                if not material:
+                    continue
+                mat_total = mat_data.quantity * material.price
+                work_material = WorkMaterial(
+                    work_id=work.id,
+                    material_id=mat_data.material_id,
+                    quantity=mat_data.quantity,
+                    unit_price=material.price,
+                    total_price=mat_total,
+                )
+                db.add(work_material)
+                materials_total += mat_total
+            work.materials_total_price = materials_total
+
+    # Общие поля, доступные админу и подрядчику
     if data.description is not None:
         work.description = data.description
     if data.work_date is not None:
         work.work_date = data.work_date
     if data.service_quantity is not None:
         work.service_quantity = data.service_quantity
-        # Пересчитываем сумму работы по текущей цене, чтобы не сбить ручные корректировки
-        work.service_total_price = Decimal(str(data.service_quantity)) * work.service_unit_price
-        work.total_price = work.service_total_price + (work.materials_total_price or Decimal('0'))
-    
+
+    # Пересчёт сумм
+    work.service_total_price = work.service_quantity * work.service_unit_price
+    work.total_price = work.service_total_price + (work.materials_total_price or Decimal('0'))
+
     db.commit()
     db.refresh(work)
     return build_work_response(work)
