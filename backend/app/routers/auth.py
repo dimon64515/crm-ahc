@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
+from app.core.config import get_settings
 from app.database import get_db
 from app.models import User
 from app.schemas import LoginRequest, TokenWithUser, UserResponse
 from app.core.security import verify_password, create_access_token, get_current_user_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+settings = get_settings()
 
 
 @router.post("/login", response_model=TokenWithUser)
@@ -31,7 +33,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "expires_in": 86400,
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         "user": user,
     }
 
