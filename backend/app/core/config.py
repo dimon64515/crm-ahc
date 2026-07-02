@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://crm_user:crm_password@localhost:5432/crm_db"
     
     SECRET_KEY: str = "your-super-secret-key-change-in-production-min-32-chars"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 дней
     
     UPLOAD_DIR: str = "/var/www/crm/uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10 MB
