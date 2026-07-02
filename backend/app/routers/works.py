@@ -234,10 +234,8 @@ def update_work(
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
 
-    if current_user.role == 'director':
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
-    if current_user.role == 'contractor' and work.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    if current_user.role in ('director', 'contractor'):
+        raise HTTPException(status_code=403, detail="Редактирование записей доступно только администратору")
 
     if current_user.role == 'admin':
         # Полное редактирование для администратора

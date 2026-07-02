@@ -226,7 +226,7 @@ def test_director_cannot_update_work():
     db.close()
 
 
-def test_contractor_update_ignores_admin_fields():
+def test_contractor_update_is_forbidden():
     db = TestingSessionLocal()
     contractor = User(username="contractor4", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
     building_a = Building(number="30", name="Корпус 30", is_active=True)
@@ -264,11 +264,8 @@ def test_contractor_update_ignores_admin_fields():
             "description": "Новое описание подрядчика",
         },
     )
-    assert response.status_code == 200, response.text
-    data = response.json()
-    assert data["description"] == "Новое описание подрядчика"
-    assert data["building"]["number"] == "30"
-    assert data["service"]["name"] == "Услуга A"
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Редактирование записей доступно только администратору"
     db.close()
 
 
@@ -551,7 +548,7 @@ def test_admin_update_future_work_date_returns_400():
     db.close()
 
 
-def test_contractor_update_future_work_date_returns_400():
+def test_contractor_update_future_work_date_is_forbidden():
     db = TestingSessionLocal()
     contractor = User(username="contractor_future2", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
     building = Building(number="101", name="Корпус 101", is_active=True)
@@ -578,13 +575,11 @@ def test_contractor_update_future_work_date_returns_400():
     login = client.post("/api/auth/login", json={"username": "contractor_future2", "password": "pass"})
     token = login.json()["access_token"]
 
-    future_date = (date.today() + timedelta(days=1)).isoformat()
     response = client.put(
         f"/api/works/{work.id}",
         headers={"Authorization": f"Bearer {token}"},
-        json={"work_date": future_date},
+        json={"description": "Попытка изменить описание"},
     )
-    assert response.status_code == 422, response.text
-    errors = response.json()["detail"]
-    assert any("Дата работы не может быть в будущем" in str(err.get("msg", "")) for err in errors)
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Редактирование записей доступно только администратору"
     db.close()

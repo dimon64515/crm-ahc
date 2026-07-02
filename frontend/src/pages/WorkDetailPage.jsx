@@ -65,7 +65,8 @@ export default function WorkDetailPage() {
     }
   }, [loadWork, user, loadBuildings, loadServices, loadContractors, loadMaterials]);
 
-  const canEdit = user.role === 'admin' || (user.role === 'contractor' && work?.created_by?.id === user.id);
+  const canEdit = user.role === 'admin';
+  const canUpload = user.role === 'admin' || (user.role === 'contractor' && work?.created_by?.id === user.id);
 
   const handleDelete = async () => {
     if (!window.confirm('Удалить запись?')) return;
@@ -425,7 +426,7 @@ export default function WorkDetailPage() {
       <div style={styles.card}>
         <div style={styles.sectionHeader}>
           <h3 style={styles.sectionTitle}>Фотографии <span style={styles.count}>({photos.length})</span></h3>
-          {canEdit && (
+          {canUpload && (
             <label style={styles.uploadLabel}>
               <input type="file" accept="image/*" multiple onChange={handleUploadPhotos} ref={photoInputRef} style={{ display: 'none' }} />
               <span style={styles.uploadBtn}>{uploading ? 'Загрузка…' : '+ Добавить фото'}</span>
@@ -455,7 +456,7 @@ export default function WorkDetailPage() {
       <div style={styles.card}>
         <div style={styles.sectionHeader}>
           <h3 style={styles.sectionTitle}>Файлы <span style={styles.count}>({files.length})</span></h3>
-          {canEdit && (
+          {canUpload && (
             <label style={styles.uploadLabel}>
               <input type="file" multiple onChange={handleUploadFiles} ref={fileInputRef} style={{ display: 'none' }} />
               <span style={styles.uploadBtn}>{uploading ? 'Загрузка…' : '+ Добавить файл'}</span>
