@@ -181,6 +181,26 @@ def test_contractor_cannot_subscribe():
         assert response.status_code == 403, response.text
 
 
+def test_test_send_push_triggers_send_to_roles():
+    import app.routers.push as push_module
+
+    with TestingSessionLocal() as db:
+        user = _create_director(db, "director_push_test_send")
+        token = _login_director("director_push_test_send")
+
+        with patch.object(push_module, "send_push_to_roles") as mock_send:
+            response = client.post(
+                "/api/push/test-send",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert response.status_code == 200, response.text
+            assert response.json() == {"success": True}
+            mock_send.assert_called_once()
+            args, kwargs = mock_send.call_args
+            assert args[1] == ["director", "admin"]
+            assert kwargs["title"] == "Тестовое уведомление"
+
+
 def test_unsubscribe_removes_only_current_endpoint():
     with TestingSessionLocal() as db:
         user = _create_director(db, "director_push_unsubscribe")

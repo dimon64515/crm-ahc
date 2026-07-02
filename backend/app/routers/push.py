@@ -10,6 +10,7 @@ from app.core.dependencies import require_director
 from app.database import get_db
 from app.models import PushSubscription, User
 from app.schemas import PushSubscriptionCreate, PushSubscriptionUnsubscribe
+from app.services.push_service import send_push_to_roles
 
 router = APIRouter(prefix="/push", tags=["push"])
 settings = get_settings()
@@ -87,4 +88,20 @@ def unsubscribe(
         PushSubscription.endpoint == data.endpoint,
     ).delete(synchronize_session=False)
     db.commit()
+    return {"success": True}
+
+
+@router.post("/test-send")
+def test_send_push(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_director),
+):
+    """Отправляет тестовое push-уведомление всем подписчикам director/admin."""
+    send_push_to_roles(
+        db,
+        ["director", "admin"],
+        title="Тестовое уведомление",
+        body=f"Отправлено пользователем {current_user.username}",
+        link="/requests",
+    )
     return {"success": True}
