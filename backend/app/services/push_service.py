@@ -1,6 +1,8 @@
+import base64
 import json
 import logging
 
+from cryptography.hazmat.primitives import serialization
 from pywebpush import webpush, WebPushException
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,15 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _normalize_vapid_private_key(key: str) -> str:
+    """Конвертирует PEM private key в raw base64url, который ожидает py_vapid.from_string."""
+    if not key or "-----BEGIN" not in key:
+        return key
+    private_key = serialization.load_pem_private_key(key.encode("utf-8"), password=None)
+    raw = private_key.private_numbers().private_value.to_bytes(32, "big")
+    return base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+
+
 def send_push(subscription: PushSubscription, title: str, body: str, link: str) -> tuple[bool, bool]:
     """Отправляет push-уведомление на одну подписку.
 
@@ -19,7 +30,9 @@ def send_push(subscription: PushSubscription, title: str, body: str, link: str) 
     - мёртвая_подписка — True, если сервер ответил 404 или 410
       и подписку следует удалить.
     """
-    if not settings.VAPID_PRIVATE_KEY or not settings.VAPID_PUBLIC_KEY:
+    private_key = _normalize_vapid_private_key(settings.VAPID_PRIVATE_KEY)
+    if not private_key or not settings.VAPID_PUBLIC_KEY:
+        logger.warning("VAPID ключи не настроены, push не отправлен")
         return False, False
 
     try:
@@ -32,7 +45,7 @@ def send_push(subscription: PushSubscription, title: str, body: str, link: str) 
                 },
             },
             data=json.dumps({"title": title, "body": body, "link": link}),
-            vapid_private_key=settings.VAPID_PRIVATE_KEY,
+            vapid_private_key=private_key,
             vapid_claims={"sub": settings.VAPID_SUBJECT},
         )
         return True, False
