@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from pywebpush import WebPushException
 from sqlalchemy import create_engine
@@ -11,6 +13,14 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import PushSubscription, User
 from app.services.push_service import send_push_to_users
+
+
+def _generate_test_public_key_pem():
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    return private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_push.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -67,11 +77,15 @@ def test_vapid_public_key_returns_key_when_configured():
     import app.routers.push as push_module
 
     old_key = push_module.settings.VAPID_PUBLIC_KEY
-    push_module.settings.VAPID_PUBLIC_KEY = "test-public-key"
+    test_pem = _generate_test_public_key_pem()
+    push_module.settings.VAPID_PUBLIC_KEY = test_pem
     try:
         response = client.get("/api/push/vapid-public-key")
         assert response.status_code == 200, response.text
-        assert response.json() == {"public_key": "test-public-key"}
+        data = response.json()
+        assert "public_key" in data
+        assert "BEGIN PUBLIC KEY" not in data["public_key"]
+        assert data["public_key"]
     finally:
         push_module.settings.VAPID_PUBLIC_KEY = old_key
 

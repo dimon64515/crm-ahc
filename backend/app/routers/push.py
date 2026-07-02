@@ -1,3 +1,6 @@
+import base64
+
+from cryptography.hazmat.primitives import serialization
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -12,11 +15,25 @@ router = APIRouter(prefix="/push", tags=["push"])
 settings = get_settings()
 
 
+def _public_key_to_base64url(pem_key: str) -> str:
+    """Конвертирует PEM-публичный ключ VAPID в формат base64url для PushManager."""
+    public_key = serialization.load_pem_public_key(pem_key.encode("utf-8"))
+    raw = public_key.public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+    return base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+
+
 @router.get("/vapid-public-key")
 def vapid_public_key():
     if not settings.VAPID_PUBLIC_KEY:
         raise HTTPException(status_code=500, detail="VAPID public key не настроен")
-    return {"public_key": settings.VAPID_PUBLIC_KEY}
+    try:
+        public_key = _public_key_to_base64url(settings.VAPID_PUBLIC_KEY)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Некорректный VAPID public key: {e}")
+    return {"public_key": public_key}
 
 
 @router.post("/subscribe")
