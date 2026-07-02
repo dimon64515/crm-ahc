@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -244,24 +244,31 @@ def test_admin_can_extend_request():
 
 
 def test_create_request_sends_push():
-    db = TestingSessionLocal()
-    watchman = User(username="watchman_push", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
-    director = User(username="director_push", hashed_password=get_password_hash("pass"), role="director", is_active=True)
-    building = Building(number="20", name="Корпус 20", is_active=True)
-    db.add_all([watchman, director, building])
-    db.commit()
+    with TestingSessionLocal() as db:
+        watchman = User(username="watchman_push", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+        director = User(username="director_push", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+        building = Building(number="20", name="Корпус 20", is_active=True)
+        db.add_all([watchman, director, building])
+        db.commit()
 
-    sub = PushSubscription(user_id=director.id, endpoint="https://push.example/x", p256dh="x", auth="y")
-    db.add(sub)
-    db.commit()
+        sub = PushSubscription(user_id=director.id, endpoint="https://push.example/x", p256dh="x", auth="y")
+        db.add(sub)
+        db.commit()
 
-    with patch("app.routers.requests.send_push_to_roles") as mock_send:
-        login = client.post("/api/auth/login", json={"username": "watchman_push", "password": "pass"})
-        token = login.json()["access_token"]
-        client.post(
-            "/api/requests",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"building_id": building.id, "description": "Тест push"},
-        )
-        mock_send.assert_called_once()
-    db.close()
+        with patch("app.routers.requests.send_push_to_roles") as mock_send:
+            login = client.post("/api/auth/login", json={"username": "watchman_push", "password": "pass"})
+            token = login.json()["access_token"]
+            response = client.post(
+                "/api/requests",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"building_id": building.id, "description": "Тест push"},
+            )
+            assert response.status_code == 200, response.text
+            request_id = response.json()["id"]
+            mock_send.assert_called_once_with(
+                ANY,
+                ["director", "admin"],
+                title="Новая заявка",
+                body="Корпус 20: Тест push",
+                link=f"/requests/{request_id}",
+            )

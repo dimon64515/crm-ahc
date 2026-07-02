@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import date, timedelta, datetime
 from typing import List
@@ -12,6 +13,8 @@ from app.core.dependencies import get_current_user, require_watchman, require_ex
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
 from app.services.push_service import send_push_to_roles
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -99,13 +102,16 @@ def create_request(
     db.commit()
     db.refresh(request)
 
-    send_push_to_roles(
-        db,
-        ["director", "admin"],
-        title="Новая заявка",
-        body=f"{request.building.name or request.building.number}: {request.description}",
-        link=f"/requests/{request.id}",
-    )
+    try:
+        send_push_to_roles(
+            db,
+            ["director", "admin"],
+            title="Новая заявка",
+            body=f"{request.building.name or request.building.number}: {request.description}",
+            link=f"/requests/{request.id}",
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при отправке push-уведомления о новой заявке: {e}")
 
     return build_request_response(request)
 
