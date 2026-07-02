@@ -1,3 +1,4 @@
+/* global clients */
 // frontend/public/sw.js
 self.addEventListener('push', (event) => {
   if (!event.data) return;
