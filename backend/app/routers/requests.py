@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import Request, RequestPhoto, Building, User
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign
 from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
@@ -17,6 +17,19 @@ from app.services.push_service import send_push_to_roles
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/requests", tags=["requests"])
+
+
+def _send_push_on_new_request(roles: list[str], title: str, body: str, link: str) -> None:
+    """Открывает новую сессию БД для фоновой отправки push-уведомлений.
+
+    Нельзя передавать сессию из Depends(get_db), так как BackgroundTasks
+    выполняется после того, как сессия будет закрыта.
+    """
+    db = SessionLocal()
+    try:
+        send_push_to_roles(db, roles, title=title, body=body, link=link)
+    finally:
+        db.close()
 
 
 def build_request_response(req: Request) -> dict:
@@ -106,8 +119,7 @@ def create_request(
     body = f"{request.building.name or request.building.number}: {request.description}"
     link = f"/requests/{request.id}"
     background_tasks.add_task(
-        send_push_to_roles,
-        db,
+        _send_push_on_new_request,
         ["director", "admin"],
         title="Новая заявка",
         body=body,

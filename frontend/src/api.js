@@ -154,7 +154,7 @@ export const requestsAPI = {
 export const pushAPI = {
   getVapidPublicKey: () => api.get('/push/vapid-public-key'),
   subscribe: (data) => api.post('/push/subscribe', data),
-  unsubscribe: () => api.delete('/push/unsubscribe'),
+  unsubscribe: (data) => api.delete('/push/unsubscribe', { data }),
 };
 
 export function urlBase64ToUint8Array(base64String) {

@@ -48,7 +48,11 @@ def send_push_to_users(db: Session, user_ids: list[int], title: str, body: str, 
     subs = db.query(PushSubscription).filter(PushSubscription.user_id.in_(user_ids)).all()
     dead = []
     for sub in subs:
-        ok, is_dead = send_push(sub, title, body, link)
+        try:
+            ok, is_dead = send_push(sub, title, body, link)
+        except Exception as e:
+            logger.error(f"Не удалось отправить push для подписки {sub.id}: {e}")
+            continue
         if is_dead:
             dead.append(sub.id)
         elif not ok:

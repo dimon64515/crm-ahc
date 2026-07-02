@@ -11,6 +11,7 @@ from app.main import app
 from app.database import Base, get_db
 from app.models import User, Building, Request, PushSubscription
 from app.core.security import get_password_hash
+import app.routers.requests as requests_module
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_requests.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -34,22 +35,27 @@ def override_get_db():
 
 client = TestClient(app)
 _old_db_override = None
+_old_session_local = None
 
 
 def setup_module():
-    global _old_db_override
+    global _old_db_override, _old_session_local
     _old_db_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = override_get_db
+    _old_session_local = requests_module.SessionLocal
+    requests_module.SessionLocal = TestingSessionLocal
     Base.metadata.create_all(bind=engine)
 
 
 def teardown_module():
-    global _old_db_override
+    global _old_db_override, _old_session_local
     Base.metadata.drop_all(bind=engine)
     if _old_db_override is not None:
         app.dependency_overrides[get_db] = _old_db_override
     else:
         app.dependency_overrides.pop(get_db, None)
+    if _old_session_local is not None:
+        requests_module.SessionLocal = _old_session_local
 
 
 def test_watchman_can_create_request():
@@ -243,7 +249,7 @@ def test_admin_can_extend_request():
     db.close()
 
 
-def test_create_request_sends_push():
+def test_create_request_schedules_push_background_task():
     with TestingSessionLocal() as db:
         watchman = User(username="watchman_push", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
         director = User(username="director_push", hashed_password=get_password_hash("pass"), role="director", is_active=True)
@@ -255,7 +261,7 @@ def test_create_request_sends_push():
         db.add(sub)
         db.commit()
 
-        with patch("app.routers.requests.send_push_to_roles") as mock_send:
+        with patch("app.routers.requests._send_push_on_new_request") as mock_send:
             login = client.post("/api/auth/login", json={"username": "watchman_push", "password": "pass"})
             token = login.json()["access_token"]
             response = client.post(
@@ -266,9 +272,57 @@ def test_create_request_sends_push():
             assert response.status_code == 200, response.text
             request_id = response.json()["id"]
             mock_send.assert_called_once_with(
-                ANY,
                 ["director", "admin"],
                 title="Новая заявка",
                 body="Корпус 20: Тест push",
                 link=f"/requests/{request_id}",
             )
+
+
+def test_create_request_background_task_sends_push_to_directors_and_admins():
+    import app.services.push_service as push_service_module
+
+    old_private = push_service_module.settings.VAPID_PRIVATE_KEY
+    old_public = push_service_module.settings.VAPID_PUBLIC_KEY
+    push_service_module.settings.VAPID_PRIVATE_KEY = "private"
+    push_service_module.settings.VAPID_PUBLIC_KEY = "public"
+    webpush_calls = []
+
+    def fake_webpush(subscription_info, **kwargs):
+        webpush_calls.append(subscription_info)
+
+    try:
+        with TestingSessionLocal() as db:
+            # Очищаем подписки от предыдущих тестов, чтобы не слать лишние push.
+            db.query(PushSubscription).delete(synchronize_session=False)
+            db.commit()
+
+            watchman = User(username="watchman_push_int", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+            director = User(username="director_push_int", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+            admin = User(username="admin_push_int", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+            contractor = User(username="contractor_push_int", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+            building = Building(number="21", name="Корпус 21", is_active=True)
+            db.add_all([watchman, director, admin, contractor, building])
+            db.commit()
+
+            director_sub = PushSubscription(user_id=director.id, endpoint="https://push.example/director", p256dh="dp", auth="da")
+            admin_sub = PushSubscription(user_id=admin.id, endpoint="https://push.example/admin", p256dh="ap", auth="aa")
+            contractor_sub = PushSubscription(user_id=contractor.id, endpoint="https://push.example/contractor", p256dh="cp", auth="ca")
+            db.add_all([director_sub, admin_sub, contractor_sub])
+            db.commit()
+
+            with patch("app.services.push_service.webpush", side_effect=fake_webpush):
+                login = client.post("/api/auth/login", json={"username": "watchman_push_int", "password": "pass"})
+                token = login.json()["access_token"]
+                response = client.post(
+                    "/api/requests",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"building_id": building.id, "description": "Интеграционный тест push"},
+                )
+                assert response.status_code == 200, response.text
+
+            endpoints = {call["endpoint"] for call in webpush_calls}
+            assert endpoints == {"https://push.example/director", "https://push.example/admin"}
+    finally:
+        push_service_module.settings.VAPID_PRIVATE_KEY = old_private
+        push_service_module.settings.VAPID_PUBLIC_KEY = old_public

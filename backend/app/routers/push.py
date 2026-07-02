@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_director
 from app.database import get_db
 from app.models import PushSubscription, User
-from app.schemas import PushSubscriptionCreate
+from app.schemas import PushSubscriptionCreate, PushSubscriptionUnsubscribe
 
 router = APIRouter(prefix="/push", tags=["push"])
 settings = get_settings()
@@ -22,7 +22,7 @@ def vapid_public_key():
 def subscribe(
     data: PushSubscriptionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_director),
 ):
     existing = db.query(PushSubscription).filter(
         PushSubscription.user_id == current_user.id,
@@ -45,9 +45,13 @@ def subscribe(
 
 @router.delete("/unsubscribe")
 def unsubscribe(
+    data: PushSubscriptionUnsubscribe,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_director),
 ):
-    db.query(PushSubscription).filter(PushSubscription.user_id == current_user.id).delete(synchronize_session=False)
+    db.query(PushSubscription).filter(
+        PushSubscription.user_id == current_user.id,
+        PushSubscription.endpoint == data.endpoint,
+    ).delete(synchronize_session=False)
     db.commit()
     return {"success": True}

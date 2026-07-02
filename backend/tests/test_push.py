@@ -141,7 +141,33 @@ def test_subscribe_updates_existing_subscription():
         assert subs[0].auth == "new-auth"
 
 
-def test_unsubscribe_removes_all_user_subscriptions():
+def test_contractor_cannot_subscribe():
+    with TestingSessionLocal() as db:
+        contractor = User(
+            username="contractor_push_subscribe",
+            hashed_password=get_password_hash("pass"),
+            role="contractor",
+            is_active=True,
+        )
+        db.add(contractor)
+        db.commit()
+
+        login = client.post("/api/auth/login", json={"username": "contractor_push_subscribe", "password": "pass"})
+        token = login.json()["access_token"]
+
+        response = client.post(
+            "/api/push/subscribe",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "endpoint": "https://push.example/contractor",
+                "p256dh": "p256dh-value",
+                "auth": "auth-value",
+            },
+        )
+        assert response.status_code == 403, response.text
+
+
+def test_unsubscribe_removes_only_current_endpoint():
     with TestingSessionLocal() as db:
         user = _create_director(db, "director_push_unsubscribe")
         db.add_all(
@@ -163,15 +189,18 @@ def test_unsubscribe_removes_all_user_subscriptions():
         db.commit()
 
         token = _login_director("director_push_unsubscribe")
-        response = client.delete(
+        response = client.request(
+            "DELETE",
             "/api/push/unsubscribe",
             headers={"Authorization": f"Bearer {token}"},
+            json={"endpoint": "https://push.example/a"},
         )
         assert response.status_code == 200, response.text
         assert response.json() == {"success": True}
 
         subs = db.query(PushSubscription).filter(PushSubscription.user_id == user.id).all()
-        assert len(subs) == 0
+        assert len(subs) == 1
+        assert subs[0].endpoint == "https://push.example/b"
 
 
 def test_send_push_to_users_deletes_dead_subscriptions_and_keeps_others():

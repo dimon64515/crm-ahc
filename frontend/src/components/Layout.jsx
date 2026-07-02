@@ -3,14 +3,13 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { pushAPI, urlBase64ToUint8Array } from '../api';
 
-const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window;
-
 function PushToggle() {
   const { user } = useAuth();
   const [enabled, setEnabled] = useState(false);
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
+    const pushSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
     setSupported(pushSupported);
     if (!pushSupported) return;
     navigator.serviceWorker.ready
@@ -23,10 +22,10 @@ function PushToggle() {
 
   const handleToggle = async () => {
     try {
+      const reg = await navigator.serviceWorker.ready;
       if (!enabled) {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') return;
-        const reg = await navigator.serviceWorker.ready;
         const { data } = await pushAPI.getVapidPublicKey();
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
@@ -39,26 +38,23 @@ function PushToggle() {
             p256dh: subJson.keys.p256dh,
             auth: subJson.keys.auth,
           });
-          setEnabled(true);
         } catch (err) {
           console.error('Ошибка при сохранении push-подписки на сервере:', err);
           await sub.unsubscribe();
-          setEnabled(false);
         }
       } else {
-        const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
         if (sub) {
-          await sub.unsubscribe();
-        }
-        try {
-          await pushAPI.unsubscribe();
-          setEnabled(false);
-        } catch (err) {
-          console.error('Ошибка при удалении push-подписки на сервере:', err);
-          setEnabled(true);
+          try {
+            await pushAPI.unsubscribe({ endpoint: sub.endpoint });
+            await sub.unsubscribe();
+          } catch (err) {
+            console.error('Ошибка при удалении push-подписки на сервере:', err);
+          }
         }
       }
+      const currentSub = await reg.pushManager.getSubscription();
+      setEnabled(!!currentSub);
     } catch (err) {
       console.error('Ошибка при переключении push-уведомлений:', err);
     }
