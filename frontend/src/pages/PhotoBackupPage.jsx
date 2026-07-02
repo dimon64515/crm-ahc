@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { buildingsAPI, backupsAPI } from '../api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function PhotoBackupPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [filters, setFilters] = useState({ date_from: '', date_to: '', building_id: '' });
   const [buildings, setBuildings] = useState([]);
   const [backups, setBackups] = useState([]);
@@ -56,6 +59,16 @@ export default function PhotoBackupPage() {
       window.URL.revokeObjectURL(url);
     } catch (e) {
       alert('Ошибка скачивания архива');
+    }
+  };
+
+  const handleDelete = async (backupId) => {
+    if (!window.confirm('Удалить архив фото?')) return;
+    try {
+      await backupsAPI.remove(backupId);
+      loadBackups();
+    } catch (e) {
+      alert('Ошибка удаления архива');
     }
   };
 
@@ -138,6 +151,9 @@ export default function PhotoBackupPage() {
                 </td>
                 <td style={{ textAlign: 'right' }}>
                   <button onClick={() => handleDownload(b.backup_id)} style={styles.smallLink}>Скачать</button>
+                  {isAdmin && (
+                    <button onClick={() => handleDelete(b.backup_id)} style={styles.smallDanger}>Удалить</button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -164,6 +180,7 @@ const styles = {
   primaryBtn: { padding: '10px 18px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   smallLink: { padding: '4px 10px', background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
+  smallDanger: { padding: '4px 10px', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
   empty: { textAlign: 'center', padding: '48px 16px' },
