@@ -18,7 +18,7 @@ function PushToggle() {
       .catch((err) => console.error('Ошибка при получении push-подписки:', err));
   }, []);
 
-  if (!supported || !(user?.role === 'director' || user?.role === 'admin')) return null;
+  if (!supported || !user) return null;
 
   const handleToggle = async () => {
     try {

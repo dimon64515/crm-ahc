@@ -142,6 +142,7 @@ export const requestsAPI = {
   complete: (id) => api.put(`/requests/${id}/complete`),
   extend: (id) => api.post(`/requests/${id}/extend`),
   print: (ids) => api.post('/requests/print', { ids }, { responseType: 'blob' }),
+  update: (id, data) => api.put(`/requests/${id}`, data),
   uploadPhotos: (id, files, { onUploadProgress } = {}) => {
     const formData = new FormData();
     files.forEach((f) => formData.append('files', f));

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
 from app.models import Request, RequestPhoto, Building, User
-from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload
+from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate
 from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
@@ -210,6 +210,39 @@ def get_request(
     if current_user.role == "watchman" and req.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
 
+    return build_request_response(req)
+
+
+@router.put("/{request_id}", response_model=RequestResponse)
+def update_request(
+    request_id: int,
+    data: RequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_director)
+):
+    req = db.query(Request).options(
+        joinedload(Request.building),
+        joinedload(Request.creator),
+        joinedload(Request.executor),
+        selectinload(Request.photos),
+    ).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if req.status == "completed":
+        raise HTTPException(status_code=400, detail="Нельзя редактировать завершённую заявку")
+
+    if data.building_id is not None:
+        building = db.query(Building).filter(Building.id == data.building_id, Building.is_active == True).first()
+        if not building:
+            raise HTTPException(status_code=400, detail="Корпус не найден или неактивен")
+        req.building_id = data.building_id
+
+    if data.description is not None:
+        req.description = data.description.strip()
+
+    db.commit()
+    db.refresh(req)
     return build_request_response(req)
 
 

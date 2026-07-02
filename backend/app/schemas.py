@@ -348,6 +348,18 @@ class RequestPrintPayload(BaseModel):
     ids: List[int] = Field(..., min_length=1)
 
 
+class RequestUpdate(BaseModel):
+    description: Optional[str] = Field(None, min_length=5)
+    building_id: Optional[int] = None
+
+    @field_validator('description')
+    @classmethod
+    def description_not_empty(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError('Описание не может быть пустым')
+        return v
+
+
 class RequestResponse(BaseModel):
     id: int
     building: BuildingResponse

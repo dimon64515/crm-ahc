@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { requestsAPI, usersAPI, getUploadUrl } from '../api';
+import { requestsAPI, usersAPI, buildingsAPI, getUploadUrl } from '../api';
 
 const STATUS_LABELS = {
   new: 'Новая',
@@ -28,7 +28,11 @@ export default function RequestDetailPage() {
   const [message, setMessage] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [users, setUsers] = useState([]);
+  const [buildings, setBuildings] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [editedDescription, setEditedDescription] = useState('');
+  const [editedBuildingId, setEditedBuildingId] = useState('');
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -63,6 +67,15 @@ export default function RequestDetailPage() {
     }
   }, []);
 
+  const loadBuildings = useCallback(async () => {
+    try {
+      const res = await buildingsAPI.list({ is_active: true });
+      setBuildings(res.data || []);
+    } catch (e) {
+      setBuildings([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadRequest();
   }, [loadRequest]);
@@ -70,8 +83,16 @@ export default function RequestDetailPage() {
   useEffect(() => {
     if (user?.role === 'director' || user?.role === 'admin') {
       loadUsers();
+      loadBuildings();
     }
-  }, [loadUsers, user?.role]);
+  }, [loadUsers, loadBuildings, user?.role]);
+
+  useEffect(() => {
+    if (req) {
+      setEditedDescription(req.description || '');
+      setEditedBuildingId(req.building?.id || '');
+    }
+  }, [req?.id]);
 
   const showMessage = (text, isError = false) => {
     setMessage({ text, isError });
@@ -99,6 +120,33 @@ export default function RequestDetailPage() {
     setSelectedUserId('');
   };
 
+  const handleUpdate = async () => {
+    setActionLoading(true);
+    try {
+      const payload = {};
+      if (editedDescription.trim() !== (req.description || '')) {
+        payload.description = editedDescription.trim();
+      }
+      if (editedBuildingId && parseInt(editedBuildingId, 10) !== req.building?.id) {
+        payload.building_id = parseInt(editedBuildingId, 10);
+      }
+      if (Object.keys(payload).length === 0) {
+        setEditMode(false);
+        setActionLoading(false);
+        return;
+      }
+      await requestsAPI.update(id, payload);
+      showMessage('Заявка обновлена');
+      setEditMode(false);
+      await loadRequest();
+    } catch (e) {
+      const detail = e.response?.data?.detail || 'Ошибка обновления заявки';
+      showMessage(detail, true);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (!user) return null;
 
   const isExecutor = user.role === 'contractor' || user.role === 'director' || user.role === 'admin';
@@ -112,6 +160,7 @@ export default function RequestDetailPage() {
     isDirector || (user.role === 'contractor' && req?.executor?.id === user.id)
   );
   const canExtend = isAdmin && req?.status !== 'completed';
+  const canEdit = isDirector && req?.status !== 'completed';
 
   const backPath = isWatchman ? '/my-requests' : '/requests';
 
@@ -140,17 +189,51 @@ export default function RequestDetailPage() {
       {!loading && req && (
         <>
           <div style={styles.card}>
+            {canEdit && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+                {!editMode ? (
+                  <button onClick={() => setEditMode(true)} style={styles.secondaryBtn}>✏️ Редактировать</button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { setEditMode(false); setEditedDescription(req.description || ''); setEditedBuildingId(req.building?.id || ''); }} style={styles.secondaryBtn}>Отмена</button>
+                    <button onClick={handleUpdate} disabled={actionLoading} style={styles.primaryBtn}>{actionLoading ? '…' : 'Сохранить'}</button>
+                  </div>
+                )}
+              </div>
+            )}
             <div style={styles.row}>
               <span style={styles.label}>Статус</span>
               <span style={{ ...styles.badge, ...statusStyle(req.status) }}>{statusLabel(req.status)}</span>
             </div>
             <div style={styles.row}>
               <span style={styles.label}>Корпус</span>
-              <span style={styles.value}>{req.building?.name || req.building?.number || '—'}</span>
+              {editMode ? (
+                <select
+                  value={editedBuildingId}
+                  onChange={(e) => setEditedBuildingId(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="">Выберите корпус</option>
+                  {buildings.map((b) => (
+                    <option key={b.id} value={b.id}>{b.number} — {b.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={styles.value}>{req.building?.name || req.building?.number || '—'}</span>
+              )}
             </div>
             <div style={styles.row}>
               <span style={styles.label}>Описание</span>
-              <span style={styles.description}>{req.description || '—'}</span>
+              {editMode ? (
+                <textarea
+                  value={editedDescription}
+                  onChange={(e) => setEditedDescription(e.target.value)}
+                  style={{ ...styles.select, minHeight: '100px', resize: 'vertical' }}
+                  rows={4}
+                />
+              ) : (
+                <span style={styles.description}>{req.description || '—'}</span>
+              )}
             </div>
             <div style={styles.row}>
               <span style={styles.label}>Создатель</span>

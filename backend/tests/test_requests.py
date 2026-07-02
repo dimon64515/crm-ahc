@@ -393,6 +393,87 @@ def test_contractor_cannot_print_requests():
     db.close()
 
 
+def test_director_can_update_request():
+    db = TestingSessionLocal()
+    director = User(username="director_update", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    watchman = User(username="watchman_update", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building1 = Building(number="40", name="Корпус 40", is_active=True)
+    building2 = Building(number="41", name="Корпус 41", is_active=True)
+    db.add_all([director, watchman, building1, building2])
+    db.commit()
+
+    req = Request(building_id=building1.id, description="Старое описание", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_update", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Новое описание", "building_id": building2.id},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["description"] == "Новое описание"
+    assert data["building"]["id"] == building2.id
+    db.close()
+
+
+def test_watchman_cannot_update_request():
+    db = TestingSessionLocal()
+    watchman = User(username="watchman_update_forbidden", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="42", name="Корпус 42", is_active=True)
+    db.add_all([watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Описание", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "watchman_update_forbidden", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Попытка изменить"},
+    )
+    assert response.status_code == 403, response.text
+    db.close()
+
+
+def test_cannot_update_completed_request():
+    db = TestingSessionLocal()
+    admin = User(username="admin_update", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    watchman = User(username="watchman_update2", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="43", name="Корпус 43", is_active=True)
+    db.add_all([admin, watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Описание", status="completed", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "admin_update", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Попытка изменить завершённую"},
+    )
+    assert response.status_code == 400, response.text
+    db.close()
+
+
 def test_print_missing_request_returns_404():
     db = TestingSessionLocal()
     admin = User(username="admin_print", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
