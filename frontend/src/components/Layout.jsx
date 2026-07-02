@@ -3,44 +3,51 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { pushAPI, urlBase64ToUint8Array } from '../api';
 
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window;
+
 function PushToggle() {
   const { user } = useAuth();
   const [enabled, setEnabled] = useState(false);
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
-    setSupported('serviceWorker' in navigator && 'PushManager' in window);
-    if (!('serviceWorker' in navigator && 'PushManager' in window)) return;
-    navigator.serviceWorker.ready.then((reg) => {
-      reg.pushManager.getSubscription().then((sub) => setEnabled(!!sub));
-    });
+    setSupported(pushSupported);
+    if (!pushSupported) return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setEnabled(!!sub))
+      .catch((err) => console.error('Ошибка при получении push-подписки:', err));
   }, []);
 
   if (!supported || !(user?.role === 'director' || user?.role === 'admin')) return null;
 
   const handleToggle = async () => {
-    if (!enabled) {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
-      const reg = await navigator.serviceWorker.ready;
-      const { data } = await pushAPI.getVapidPublicKey();
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(data.public_key),
-      });
-      const subJson = sub.toJSON();
-      await pushAPI.subscribe({
-        endpoint: subJson.endpoint,
-        p256dh: subJson.keys.p256dh,
-        auth: subJson.keys.auth,
-      });
-      setEnabled(true);
-    } else {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) await sub.unsubscribe();
-      await pushAPI.unsubscribe();
-      setEnabled(false);
+    try {
+      if (!enabled) {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+        const reg = await navigator.serviceWorker.ready;
+        const { data } = await pushAPI.getVapidPublicKey();
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(data.public_key),
+        });
+        const subJson = sub.toJSON();
+        await pushAPI.subscribe({
+          endpoint: subJson.endpoint,
+          p256dh: subJson.keys.p256dh,
+          auth: subJson.keys.auth,
+        });
+        setEnabled(true);
+      } else {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+        await pushAPI.unsubscribe();
+        setEnabled(false);
+      }
+    } catch (err) {
+      console.error('Ошибка при переключении push-уведомлений:', err);
     }
   };
 
