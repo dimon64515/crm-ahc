@@ -1,5 +1,9 @@
 /* global clients */
 // frontend/public/sw.js
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (_event) => _event.waitUntil(clients.claim()));
+self.addEventListener('fetch', (_event) => _event.respondWith(fetch(_event.request)));
+
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {

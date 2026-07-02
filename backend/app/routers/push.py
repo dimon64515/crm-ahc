@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -39,7 +40,22 @@ def subscribe(
             auth=data.auth,
         )
         db.add(sub)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(PushSubscription).filter(
+            PushSubscription.user_id == current_user.id,
+            PushSubscription.endpoint == data.endpoint,
+        ).first()
+        if existing:
+            existing.p256dh = data.p256dh
+            existing.auth = data.auth
+            db.commit()
+        else:
+            raise
+
     return {"success": True}
 
 
