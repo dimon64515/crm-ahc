@@ -1,6 +1,55 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { pushAPI, urlBase64ToUint8Array } from '../api';
+
+function PushToggle() {
+  const { user } = useAuth();
+  const [enabled, setEnabled] = useState(false);
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    setSupported('serviceWorker' in navigator && 'PushManager' in window);
+    if (!('serviceWorker' in navigator && 'PushManager' in window)) return;
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.pushManager.getSubscription().then((sub) => setEnabled(!!sub));
+    });
+  }, []);
+
+  if (!supported || !(user?.role === 'director' || user?.role === 'admin')) return null;
+
+  const handleToggle = async () => {
+    if (!enabled) {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+      const reg = await navigator.serviceWorker.ready;
+      const { data } = await pushAPI.getVapidPublicKey();
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(data.public_key),
+      });
+      const subJson = sub.toJSON();
+      await pushAPI.subscribe({
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys.p256dh,
+        auth: subJson.keys.auth,
+      });
+      setEnabled(true);
+    } else {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+      await pushAPI.unsubscribe();
+      setEnabled(false);
+    }
+  };
+
+  return (
+    <button onClick={handleToggle} style={styles.pushBtn} type="button">
+      {enabled ? '🔕 Отключить уведомления' : '🔔 Включить уведомления'}
+    </button>
+  );
+}
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -47,6 +96,7 @@ export default function Layout({ children }) {
           })}
         </div>
         <div className="layout-nav-right">
+          <PushToggle />
           <span className="layout-user" title={user.role}>
             <span className="layout-user-name">{user.full_name || user.username}</span>
             <span className="layout-role-badge">{roleLabel(user.role)}</span>
@@ -63,3 +113,15 @@ function roleLabel(role) {
   const map = { contractor: 'Подрядчик', watchman: 'Вахтёр', director: 'Директор', admin: 'Админ' };
   return map[role] || role;
 }
+
+const styles = {
+  pushBtn: {
+    background: 'transparent',
+    border: '1px solid currentColor',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    cursor: 'pointer',
+    color: 'inherit',
+    fontSize: '0.9rem',
+  },
+};
