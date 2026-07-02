@@ -11,6 +11,7 @@ from app.schemas import RequestCreate, RequestResponse, RequestListResponse, Req
 from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
+from app.services.push_service import send_push_to_roles
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -97,6 +98,15 @@ def create_request(
     db.add(request)
     db.commit()
     db.refresh(request)
+
+    send_push_to_roles(
+        db,
+        ["director", "admin"],
+        title="Новая заявка",
+        body=f"{request.building.name or request.building.number}: {request.description}",
+        link=f"/requests/{request.id}",
+    )
+
     return build_request_response(request)
 
 
