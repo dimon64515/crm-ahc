@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     
     ALLOWED_ORIGINS: str = "https://report.fanat-mv.ru,http://localhost:5173"
     
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:admin@example.com"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
