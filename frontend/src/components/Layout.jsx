@@ -14,7 +14,7 @@ function PushToggle() {
     if (!pushSupported) return;
     navigator.serviceWorker.ready
       .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setEnabled(!!sub))
+      .then((sub) => setEnabled(!!sub && Notification.permission === 'granted'))
       .catch((err) => console.error('Ошибка при получении push-подписки:', err));
   }, []);
 
@@ -45,11 +45,12 @@ function PushToggle() {
       } else {
         const sub = await reg.pushManager.getSubscription();
         if (sub) {
+          const subJson = sub.toJSON();
           try {
-            await pushAPI.unsubscribe({ endpoint: sub.endpoint });
             await sub.unsubscribe();
+            await pushAPI.unsubscribe({ endpoint: subJson.endpoint });
           } catch (err) {
-            console.error('Ошибка при удалении push-подписки на сервере:', err);
+            console.error('Ошибка при удалении push-подписки:', err);
           }
         }
       }

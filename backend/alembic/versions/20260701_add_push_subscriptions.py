@@ -27,6 +27,7 @@ def upgrade() -> None:
         sa.Column("p256dh", sa.String(255), nullable=False),
         sa.Column("auth", sa.String(255), nullable=False),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
+        sa.UniqueConstraint("user_id", "endpoint"),
     )
     op.create_index("ix_push_subscriptions_user_id", "push_subscriptions", ["user_id"])
 

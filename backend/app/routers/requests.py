@@ -27,7 +27,10 @@ def _send_push_on_new_request(roles: list[str], title: str, body: str, link: str
     """
     db = SessionLocal()
     try:
-        send_push_to_roles(db, roles, title=title, body=body, link=link)
+        try:
+            send_push_to_roles(db, roles, title=title, body=body, link=link)
+        except Exception:
+            logger.exception("Не удалось отправить push-уведомление о новой заявке")
     finally:
         db.close()
 

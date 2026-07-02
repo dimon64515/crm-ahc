@@ -200,3 +200,7 @@ class PushSubscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'endpoint', name='uix_push_subscription_user_endpoint'),
+    )

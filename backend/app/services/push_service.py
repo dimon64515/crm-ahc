@@ -60,7 +60,12 @@ def send_push_to_users(db: Session, user_ids: list[int], title: str, body: str, 
             continue
     if dead:
         db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Не удалось удалить мёртвые push-подписки")
+            raise
 
 
 def send_push_to_roles(db: Session, roles: list[str], title: str, body: str, link: str) -> None:
