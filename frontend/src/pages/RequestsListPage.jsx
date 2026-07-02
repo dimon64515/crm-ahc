@@ -36,7 +36,9 @@ export default function RequestsListPage() {
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
+  const canPrint = user?.role === 'director' || user?.role === 'admin';
   const canExtend = (req) => user?.role === 'admin' && req.status !== 'completed';
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const loadBuildings = async () => {
     try {
@@ -84,6 +86,10 @@ export default function RequestsListPage() {
     loadRequests();
   }, [loadRequests]);
 
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [items.length]);
+
   const handleAction = async (action, id) => {
     setActionId(id);
     try {
@@ -109,6 +115,40 @@ export default function RequestsListPage() {
     }
   };
 
+  const toggleSelection = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.length === items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((r) => r.id));
+    }
+  };
+
+  const handlePrint = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      const res = await requestsAPI.print(selectedIds);
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const idsPart = selectedIds.slice(0, 5).join('_');
+      const suffix = selectedIds.length > 5 ? `_и_еще_${selectedIds.length - 5}` : '';
+      link.download = `zayavki_${idsPart}${suffix}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Ошибка формирования печатных форм');
+    }
+  };
+
   const canComplete = (req) => {
     if (req.status !== 'in_progress') return false;
     if (user?.role === 'director' || user?.role === 'admin') return true;
@@ -125,6 +165,19 @@ export default function RequestsListPage() {
     <div>
       <div style={styles.header}>
         <h1 style={styles.title}>Заявки</h1>
+        {canPrint && (
+          <button
+            onClick={handlePrint}
+            disabled={selectedIds.length === 0}
+            style={{
+              ...styles.printBtn,
+              opacity: selectedIds.length === 0 ? 0.5 : 1,
+              cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            🖨 Печать выбранных ({selectedIds.length})
+          </button>
+        )}
       </div>
 
       <div style={styles.filters}>
@@ -178,6 +231,16 @@ export default function RequestsListPage() {
           <table style={styles.table}>
             <thead>
               <tr>
+                {canPrint && (
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && selectedIds.length === items.length}
+                      onChange={toggleAll}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </th>
+                )}
                 <th>ID</th>
                 <th>Корпус</th>
                 <th>Описание</th>
@@ -192,6 +255,16 @@ export default function RequestsListPage() {
             <tbody>
               {items.map((req) => (
                 <tr key={req.id}>
+                  {canPrint && (
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(req.id)}
+                        onChange={() => toggleSelection(req.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
+                  )}
                   <td className="tabular-nums">{req.id}</td>
                   <td>{req.building?.name || req.building?.number || '—'}</td>
                   <td style={styles.description} title={req.description}>{req.description || '—'}</td>
@@ -258,8 +331,9 @@ export default function RequestsListPage() {
 }
 
 const styles = {
-  header: { marginBottom: '20px' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
   title: { fontSize: '22px', fontWeight: 700, letterSpacing: '-0.025em' },
+  printBtn: { padding: '8px 16px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
   filters: { display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
   statusButtons: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   statusBtn: { padding: '8px 14px', borderRadius: '999px', border: '1px solid', fontSize: '14px', cursor: 'pointer', transition: 'all 0.15s ease' },

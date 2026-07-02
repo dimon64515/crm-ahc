@@ -344,6 +344,10 @@ class RequestAssign(BaseModel):
     user_id: int
 
 
+class RequestPrintPayload(BaseModel):
+    ids: List[int] = Field(..., min_length=1)
+
+
 class RequestResponse(BaseModel):
     id: int
     building: BuildingResponse

@@ -1,3 +1,4 @@
+import zipfile
 from datetime import date, timedelta
 from io import BytesIO
 from unittest.mock import ANY, patch
@@ -326,3 +327,85 @@ def test_create_request_background_task_sends_push_to_directors_and_admins():
     finally:
         push_service_module.settings.VAPID_PRIVATE_KEY = old_private
         push_service_module.settings.VAPID_PUBLIC_KEY = old_public
+
+
+def test_director_can_print_requests_zip():
+    db = TestingSessionLocal()
+    director = User(username="director_print", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    watchman = User(username="watchman_print", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="30", name="Корпус 30", address="ул. Лермонтова, 5", is_active=True)
+    db.add_all([director, watchman, building])
+    db.commit()
+
+    req1 = Request(building_id=building.id, description="Протечка", status="new", created_by=watchman.id,
+                   due_date=date.today() + timedelta(days=5), extended_count=0)
+    req2 = Request(building_id=building.id, description="Замена лампочки", status="in_progress", created_by=watchman.id,
+                   due_date=date.today() + timedelta(days=5), extended_count=1)
+    db.add_all([req1, req2])
+    db.commit()
+    db.refresh(req1)
+    db.refresh(req2)
+
+    login = client.post("/api/auth/login", json={"username": "director_print", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests/print",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"ids": [req1.id, req2.id]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/zip"
+    assert 'attachment; filename="zayavki_' in response.headers["content-disposition"]
+
+    zip_bytes = BytesIO(response.content)
+    with zipfile.ZipFile(zip_bytes, "r") as zf:
+        names = zf.namelist()
+        assert f"zayavka_{req1.id}.docx" in names
+        assert f"zayavka_{req2.id}.docx" in names
+        assert len(names) == 2
+    db.close()
+
+
+def test_contractor_cannot_print_requests():
+    db = TestingSessionLocal()
+    contractor = User(username="contractor_print", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    watchman = User(username="watchman_print2", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="31", name="Корпус 31", is_active=True)
+    db.add_all([contractor, watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Тест", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_print", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests/print",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"ids": [req.id]},
+    )
+    assert response.status_code == 403, response.text
+    db.close()
+
+
+def test_print_missing_request_returns_404():
+    db = TestingSessionLocal()
+    admin = User(username="admin_print", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    db.add(admin)
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "admin_print", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests/print",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"ids": [99999]},
+    )
+    assert response.status_code == 404, response.text
+    db.close()

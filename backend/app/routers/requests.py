@@ -1,18 +1,22 @@
+import io
 import logging
 import os
+import zipfile
 from datetime import date, timedelta, datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
 from app.models import Request, RequestPhoto, Building, User
-from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign
+from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload
 from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
 from app.services.push_service import send_push_to_roles
+from app.services.request_print_service import fill_request_template
 
 logger = logging.getLogger(__name__)
 
@@ -320,3 +324,45 @@ def extend_request(
     db.commit()
     db.refresh(req)
     return build_request_response(req)
+
+
+@router.post("/print")
+def print_requests(
+    data: RequestPrintPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_director)
+):
+    """Формирует ZIP-архив с заполненными печатными формами заявок."""
+    requests = db.query(Request).options(
+        joinedload(Request.building),
+        joinedload(Request.creator),
+        joinedload(Request.executor),
+    ).filter(Request.id.in_(data.ids)).all()
+
+    found_ids = {r.id for r in requests}
+    missing = [rid for rid in data.ids if rid not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Заявки не найдены: {missing}")
+
+    # Сортируем заявки в том же порядке, что и запрошенные id
+    request_map = {r.id: r for r in requests}
+    ordered_requests = [request_map[rid] for rid in data.ids]
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for req in ordered_requests:
+            docx_buffer = fill_request_template(req)
+            filename = f"zayavka_{req.id}.docx"
+            zf.writestr(filename, docx_buffer.getvalue())
+
+    zip_buffer.seek(0)
+    ids_part = "_".join(str(rid) for rid in data.ids[:5])
+    if len(data.ids) > 5:
+        ids_part += f"_и_еще_{len(data.ids) - 5}"
+    archive_name = f"zayavki_{ids_part}.zip"
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{archive_name}"'},
+    )
