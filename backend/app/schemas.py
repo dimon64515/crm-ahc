@@ -380,3 +380,18 @@ class RequestListItem(BaseModel):
 class RequestListResponse(BaseModel):
     items: List[RequestListItem]
     total: int
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionResponse(BaseModel):
+    id: int
+    endpoint: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
