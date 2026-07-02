@@ -3,7 +3,7 @@ import os
 from datetime import date, timedelta, datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
@@ -83,6 +83,7 @@ def save_request_photo(upload_file, request_id: int) -> dict:
 @router.post("", response_model=RequestResponse)
 def create_request(
     data: RequestCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_watchman)
 ):
@@ -102,16 +103,16 @@ def create_request(
     db.commit()
     db.refresh(request)
 
-    try:
-        send_push_to_roles(
-            db,
-            ["director", "admin"],
-            title="Новая заявка",
-            body=f"{request.building.name or request.building.number}: {request.description}",
-            link=f"/requests/{request.id}",
-        )
-    except Exception as e:
-        logger.error(f"Ошибка при отправке push-уведомления о новой заявке: {e}")
+    body = f"{request.building.name or request.building.number}: {request.description}"
+    link = f"/requests/{request.id}"
+    background_tasks.add_task(
+        send_push_to_roles,
+        db,
+        ["director", "admin"],
+        title="Новая заявка",
+        body=body,
+        link=link,
+    )
 
     return build_request_response(request)
 

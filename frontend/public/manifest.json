@@ -1,6 +1,6 @@
 {
   "name": "CRM АХЧ",
-  "short_name": "CRM АХЧ",
+  "short_name": "CRM",
   "description": "CRM система для АХЧ",
   "start_url": "/",
   "display": "standalone",

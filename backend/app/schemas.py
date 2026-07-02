@@ -383,15 +383,6 @@ class RequestListResponse(BaseModel):
 
 
 class PushSubscriptionCreate(BaseModel):
-    endpoint: str
-    p256dh: str
-    auth: str
-
-
-class PushSubscriptionResponse(BaseModel):
-    id: int
-    endpoint: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    endpoint: str = Field(..., max_length=500)
+    p256dh: str = Field(..., max_length=255)
+    auth: str = Field(..., max_length=255)

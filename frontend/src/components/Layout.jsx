@@ -33,18 +33,31 @@ function PushToggle() {
           applicationServerKey: urlBase64ToUint8Array(data.public_key),
         });
         const subJson = sub.toJSON();
-        await pushAPI.subscribe({
-          endpoint: subJson.endpoint,
-          p256dh: subJson.keys.p256dh,
-          auth: subJson.keys.auth,
-        });
-        setEnabled(true);
+        try {
+          await pushAPI.subscribe({
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys.p256dh,
+            auth: subJson.keys.auth,
+          });
+          setEnabled(true);
+        } catch (err) {
+          console.error('Ошибка при сохранении push-подписки на сервере:', err);
+          await sub.unsubscribe();
+          setEnabled(false);
+        }
       } else {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
-        if (sub) await sub.unsubscribe();
-        await pushAPI.unsubscribe();
-        setEnabled(false);
+        if (sub) {
+          await sub.unsubscribe();
+        }
+        try {
+          await pushAPI.unsubscribe();
+          setEnabled(false);
+        } catch (err) {
+          console.error('Ошибка при удалении push-подписки на сервере:', err);
+          setEnabled(true);
+        }
       }
     } catch (err) {
       console.error('Ошибка при переключении push-уведомлений:', err);
