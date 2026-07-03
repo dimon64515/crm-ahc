@@ -363,9 +363,17 @@ def extend_request(
 def print_requests(
     data: RequestPrintPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_director)
+    current_user: User = Depends(get_current_user)
 ):
-    """Формирует ZIP-архив с заполненными печатными формами заявок."""
+    """Формирует ZIP-архив с заполненными печатными формами заявок.
+
+    Доступ:
+    - admin/director: любые заявки;
+    - contractor: только назначенные на него заявки.
+    """
+    if current_user.role not in ("admin", "director", "contractor"):
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+
     requests = db.query(Request).options(
         joinedload(Request.building),
         joinedload(Request.creator),
@@ -376,6 +384,11 @@ def print_requests(
     missing = [rid for rid in data.ids if rid not in found_ids]
     if missing:
         raise HTTPException(status_code=404, detail=f"Заявки не найдены: {missing}")
+
+    if current_user.role == "contractor":
+        for req in requests:
+            if req.assigned_to != current_user.id:
+                raise HTTPException(status_code=403, detail="Недостаточно прав")
 
     # Сортируем заявки в том же порядке, что и запрошенные id
     request_map = {r.id: r for r in requests}

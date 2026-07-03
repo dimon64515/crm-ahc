@@ -367,6 +367,62 @@ def test_director_can_print_requests_zip():
     db.close()
 
 
+def test_contractor_can_print_assigned_requests():
+    db = TestingSessionLocal()
+    director = User(username="director_contractor_print", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_print_ok", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    other_contractor = User(username="other_contractor_print", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    watchman = User(username="watchman_contractor_print", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="50", name="Корпус 50", is_active=True)
+    db.add_all([director, contractor, other_contractor, watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Моя заявка", status="in_progress", created_by=watchman.id,
+                  assigned_to=contractor.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_print_ok", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests/print",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"ids": [req.id]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/zip"
+    db.close()
+
+
+def test_contractor_cannot_print_other_requests():
+    db = TestingSessionLocal()
+    contractor = User(username="contractor_print_other", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    other_contractor = User(username="contractor_owner", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    watchman = User(username="watchman_other_print", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="51", name="Корпус 51", is_active=True)
+    db.add_all([contractor, other_contractor, watchman, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Чужая заявка", status="in_progress", created_by=watchman.id,
+                  assigned_to=other_contractor.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_print_other", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests/print",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"ids": [req.id]},
+    )
+    assert response.status_code == 403, response.text
+    db.close()
+
+
 def test_contractor_cannot_print_requests():
     db = TestingSessionLocal()
     contractor = User(username="contractor_print", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)

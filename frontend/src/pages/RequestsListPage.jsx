@@ -36,7 +36,7 @@ export default function RequestsListPage() {
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
-  const canPrint = user?.role === 'director' || user?.role === 'admin';
+  const canPrint = user?.role === 'director' || user?.role === 'admin' || user?.role === 'contractor';
   const canExtend = (req) => user?.role === 'admin' && req.status !== 'completed';
   const [selectedIds, setSelectedIds] = useState([]);
 

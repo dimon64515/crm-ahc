@@ -358,11 +358,14 @@ function SummaryReport() {
 
 function RequestsDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterBuilding, setFilterBuilding] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const canPrint = user?.role === 'director' || user?.role === 'admin';
 
   const statusLabel = { new: 'Новая', in_progress: 'В работе', completed: 'Завершена' };
   const statusStyle = {
@@ -409,6 +412,44 @@ function RequestsDashboard() {
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
   const isOverdue = (r) => r.status !== 'completed' && r.due_date && new Date(r.due_date) < new Date(new Date().setHours(0,0,0,0));
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [items.length, filterStatus, filterBuilding]);
+
+  const toggleSelection = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.length === items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((r) => r.id));
+    }
+  };
+
+  const handlePrint = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      const res = await requestsAPI.print(selectedIds);
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const idsPart = selectedIds.slice(0, 5).join('_');
+      const suffix = selectedIds.length > 5 ? `_и_еще_${selectedIds.length - 5}` : '';
+      link.download = `zayavki_${idsPart}${suffix}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Ошибка формирования печатных форм');
+    }
+  };
 
   return (
     <div>
@@ -464,6 +505,19 @@ function RequestsDashboard() {
           <option value="">Все корпуса</option>
           {buildings.map(b => <option key={b.id} value={b.id}>{b.number} — {b.name}</option>)}
         </select>
+        {canPrint && (
+          <button
+            onClick={handlePrint}
+            disabled={selectedIds.length === 0}
+            style={{
+              ...styles.secondaryBtn,
+              opacity: selectedIds.length === 0 ? 0.5 : 1,
+              cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            🖨 Печать ({selectedIds.length})
+          </button>
+        )}
         <button onClick={() => navigate('/requests')} style={styles.filterBtn}>Перейти к заявкам →</button>
       </div>
 
@@ -476,6 +530,16 @@ function RequestsDashboard() {
           <table style={styles.table}>
             <thead>
               <tr>
+                {canPrint && (
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && selectedIds.length === items.length}
+                      onChange={toggleAll}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </th>
+                )}
                 <th>ID</th>
                 <th>Корпус</th>
                 <th>Описание</th>
@@ -488,6 +552,16 @@ function RequestsDashboard() {
             <tbody>
               {items.slice(0, 10).map((r) => (
                 <tr key={r.id}>
+                  {canPrint && (
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(r.id)}
+                        onChange={() => toggleSelection(r.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
+                  )}
                   <td className="tabular-nums">{r.id}</td>
                   <td>{r.building?.name || r.building?.number || '—'}</td>
                   <td style={{ maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.description}>{r.description || '—'}</td>
