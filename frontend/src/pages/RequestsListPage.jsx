@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { requestsAPI, buildingsAPI, usersAPI } from '../api';
+import { requestsAPI, buildingsAPI, usersAPI, servicesAPI } from '../api';
 
 const STATUS_BUTTONS = [
   { value: '', label: 'Все', style: { background: '#f3f4f6', color: '#374151', borderColor: '#d1d5db' } },
@@ -32,7 +32,9 @@ export default function RequestsListPage() {
   const [filters, setFilters] = useState({ status: '', building_id: '' });
   const [buildings, setBuildings] = useState([]);
   const [users, setUsers] = useState([]);
+  const [services, setServices] = useState([]);
   const [actionId, setActionId] = useState(null);
+  const [selectedAssignments, setSelectedAssignments] = useState({});
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
@@ -58,6 +60,15 @@ export default function RequestsListPage() {
     }
   };
 
+  const loadServices = async () => {
+    try {
+      const res = await servicesAPI.list();
+      setServices((res.data.items || []).filter((s) => s.is_active));
+    } catch (e) {
+      setServices([]);
+    }
+  };
+
   const loadRequests = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -79,6 +90,7 @@ export default function RequestsListPage() {
     loadBuildings();
     if (canAssign) {
       loadUsers();
+      loadServices();
     }
   }, [canAssign]);
 
@@ -102,11 +114,15 @@ export default function RequestsListPage() {
     }
   };
 
-  const handleAssign = async (requestId, userId) => {
+  const handleAssign = async (requestId) => {
+    const assignment = selectedAssignments[requestId] || {};
+    const userId = assignment.userId;
+    const serviceId = assignment.serviceId;
     if (!userId) return;
     setActionId(requestId);
     try {
-      await requestsAPI.assign(requestId, parseInt(userId, 10));
+      await requestsAPI.assign(requestId, parseInt(userId, 10), serviceId ? parseInt(serviceId, 10) : undefined);
+      setSelectedAssignments((prev) => ({ ...prev, [requestId]: {} }));
       await loadRequests();
     } catch (e) {
       alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
@@ -244,6 +260,7 @@ export default function RequestsListPage() {
                 <th>ID</th>
                 <th>Корпус</th>
                 <th>Описание</th>
+                <th>Услуга</th>
                 <th>Статус</th>
                 <th>Создатель</th>
                 <th>Исполнитель</th>
@@ -268,6 +285,7 @@ export default function RequestsListPage() {
                   <td className="tabular-nums">{req.id}</td>
                   <td>{req.building?.name || req.building?.number || '—'}</td>
                   <td style={styles.description} title={req.description}>{req.description || '—'}</td>
+                  <td>{req.service?.name || '—'}</td>
                   <td>
                     <span style={{ ...styles.badge, ...statusStyle(req.status) }}>
                       {statusLabel(req.status)}
@@ -289,17 +307,37 @@ export default function RequestsListPage() {
                       </button>
                     )}
                     {canAssign && req.status !== 'completed' && (
-                      <select
-                        value=""
-                        onChange={(e) => { const val = e.target.value; e.target.value = ''; handleAssign(req.id, val); }}
-                        disabled={actionId === req.id}
-                        style={styles.selectAssign}
-                      >
-                        <option value="">Назначить</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
-                        ))}
-                      </select>
+                      <>
+                        <select
+                          value={selectedAssignments[req.id]?.userId || ''}
+                          onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], userId: e.target.value } }))}
+                          disabled={actionId === req.id}
+                          style={styles.selectAssign}
+                        >
+                          <option value="">Исполнитель</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={selectedAssignments[req.id]?.serviceId || ''}
+                          onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
+                          disabled={actionId === req.id}
+                          style={{ ...styles.selectAssign, minWidth: '140px' }}
+                        >
+                          <option value="">Услуга</option>
+                          {services.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => handleAssign(req.id)}
+                          disabled={actionId === req.id || !selectedAssignments[req.id]?.userId}
+                          style={styles.actionBtn}
+                        >
+                          {actionId === req.id ? '…' : 'Назначить'}
+                        </button>
+                      </>
                     )}
                     {canExtend(req) && (
                       <button

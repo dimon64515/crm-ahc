@@ -4,7 +4,7 @@ from typing import List
 from decimal import Decimal
 
 from app.database import get_db
-from app.models import Work, WorkPhoto, WorkFile, WorkMaterial, Building, Service, Material, User
+from app.models import Work, WorkPhoto, WorkFile, WorkMaterial, Building, Service, Material, User, Request
 from app.schemas import (
     WorkCreate, WorkResponse, WorkListResponse, WorkListItem,
     WorkPhotoResponse, WorkFileResponse, WorkMaterialResponse,
@@ -40,6 +40,7 @@ def build_work_response(work: Work) -> dict:
         ],
         "materials_total_price": work.materials_total_price,
         "total_price": work.total_price,
+        "request_id": work.request_id,
         "photos": [
             {
                 "id": p.id,
@@ -80,6 +81,7 @@ def build_work_list_item(work: Work) -> dict:
         "description": work.description,
         "materials_total_price": work.materials_total_price,
         "total_price": work.total_price,
+        "request_id": work.request_id,
         "photos_count": len(work.photos),
         "files_count": len(work.files),
         "created_at": work.created_at,
@@ -110,6 +112,7 @@ def create_work(
         user_id=current_user.id,
         building_id=data.building_id,
         service_id=data.service_id,
+        request_id=data.request_id,
         work_date=data.work_date,
         description=data.description,
         service_quantity=data.service_quantity,
@@ -257,6 +260,15 @@ def update_work(
             if not user or not user.is_active or user.role != "contractor":
                 raise HTTPException(status_code=400, detail="Подрядчик не найден или неактивен")
             work.user_id = data.user_id
+
+        if data.request_id is not None:
+            if data.request_id == 0:
+                work.request_id = None
+            else:
+                request = db.query(Request).filter(Request.id == data.request_id).first()
+                if not request:
+                    raise HTTPException(status_code=404, detail="Заявка не найдена")
+                work.request_id = data.request_id
 
         if data.materials is not None:
             material_ids = [m.material_id for m in data.materials]

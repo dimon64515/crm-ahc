@@ -158,6 +158,7 @@ class WorkCreate(BaseModel):
     service_quantity: Decimal = Field(gt=0)
     description: str = Field(min_length=5)
     materials: List[WorkMaterialCreate] = []
+    request_id: Optional[int] = None
 
     @validator('work_date')
     def work_date_not_in_future(cls, v):
@@ -205,6 +206,7 @@ class WorkUpdateAdmin(WorkUpdate):
     service_id: Optional[int] = None
     user_id: Optional[int] = None
     materials: Optional[List[WorkMaterialCreate]] = None
+    request_id: Optional[int] = None
 
 
 class WorkResponse(BaseModel):
@@ -219,6 +221,7 @@ class WorkResponse(BaseModel):
     materials: List[WorkMaterialResponse]
     materials_total_price: Optional[Decimal]
     total_price: Optional[Decimal]
+    request_id: Optional[int] = None
     photos: List[WorkPhotoResponse]
     files: List[WorkFileResponse]
     created_at: datetime
@@ -239,6 +242,7 @@ class WorkListItem(BaseModel):
     description: str
     materials_total_price: Optional[Decimal]
     total_price: Optional[Decimal]
+    request_id: Optional[int] = None
     photos_count: int
     files_count: int
     created_at: datetime
@@ -342,6 +346,7 @@ class RequestCreate(BaseModel):
 
 class RequestAssign(BaseModel):
     user_id: int
+    service_id: Optional[int] = None
 
 
 class RequestPrintPayload(BaseModel):
@@ -363,6 +368,7 @@ class RequestUpdate(BaseModel):
 class RequestResponse(BaseModel):
     id: int
     building: BuildingResponse
+    service: Optional[ServiceResponse]
     description: str
     status: str
     creator: UserResponse
@@ -380,6 +386,7 @@ class RequestResponse(BaseModel):
 class RequestListItem(BaseModel):
     id: int
     building: BuildingResponse
+    service: Optional[ServiceResponse]
     description: str
     status: str
     creator: UserResponse

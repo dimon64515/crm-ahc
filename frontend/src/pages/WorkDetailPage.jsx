@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { worksAPI, buildingsAPI, servicesAPI, usersAPI, materialsAPI } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -252,6 +252,15 @@ export default function WorkDetailPage() {
           </div>
           <div style={styles.badge}>{work.service?.name}</div>
         </div>
+
+        {work.request_id && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Заявка</h3>
+            <Link to={`/requests/${work.request_id}`} style={styles.link}>
+              Заявка №{work.request_id}
+            </Link>
+          </div>
+        )}
 
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Описание</h3>
@@ -513,6 +522,7 @@ const styles = {
   title: { fontSize: '20px', fontWeight: 700, letterSpacing: '-0.025em', margin: 0 },
   meta: { fontSize: '14px', color: '#6b7280', margin: '4px 0 0' },
   badge: { padding: '6px 14px', background: '#eff6ff', color: '#1d4ed8', borderRadius: '9999px', fontSize: '13px', fontWeight: 600 },
+  link: { color: '#2563eb', textDecoration: 'none', fontSize: '14px', fontWeight: 500 },
   section: { marginBottom: '20px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
   sectionTitle: { fontSize: '15px', fontWeight: 600, color: '#111827', margin: 0 },

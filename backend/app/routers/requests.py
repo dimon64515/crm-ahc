@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
-from app.models import Request, RequestPhoto, Building, User
+from app.models import Request, RequestPhoto, Building, User, Service, Work
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate
 from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
 from app.core.config import get_settings
@@ -43,6 +43,7 @@ def build_request_response(req: Request) -> dict:
     return {
         "id": req.id,
         "building": req.building,
+        "service": req.service,
         "description": req.description,
         "status": req.status,
         "creator": req.creator,
@@ -69,6 +70,7 @@ def build_request_list_item(req: Request) -> dict:
     return {
         "id": req.id,
         "building": req.building,
+        "service": req.service,
         "description": req.description,
         "status": req.status,
         "creator": req.creator,
@@ -313,6 +315,12 @@ def assign_request(
     if user.role not in ("contractor", "director", "admin"):
         raise HTTPException(status_code=400, detail="Назначать заявку можно только на исполнителя")
 
+    if data.service_id is not None:
+        service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
+        if not service:
+            raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
+        req.service_id = data.service_id
+
     req.assigned_to = data.user_id
     req.status = "in_progress"
     db.commit()
@@ -333,6 +341,31 @@ def complete_request(
         raise HTTPException(status_code=400, detail="Заявка уже завершена")
     if current_user.role == "contractor" and req.assigned_to != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
+
+    if req.service_id is None:
+        raise HTTPException(status_code=400, detail="Для завершения заявки необходимо назначить вид работ")
+
+    service = db.query(Service).filter(Service.id == req.service_id, Service.is_active == True).first()
+    if not service:
+        raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
+
+    executor_id = req.assigned_to or current_user.id
+    existing_work = db.query(Work).filter(Work.request_id == req.id).first()
+    if not existing_work:
+        work = Work(
+            user_id=executor_id,
+            building_id=req.building_id,
+            service_id=req.service_id,
+            request_id=req.id,
+            work_date=date.today(),
+            description=req.description,
+            service_quantity=1,
+            service_unit_price=service.price,
+            service_total_price=service.price,
+            materials_total_price=0,
+            total_price=service.price,
+        )
+        db.add(work)
 
     req.status = "completed"
     db.commit()

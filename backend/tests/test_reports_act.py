@@ -30,6 +30,7 @@ class FakeWork:
     service_unit_price = Decimal("1200.00")
     service_total_price = Decimal("12600.00")
     total_price = Decimal("12600.00")
+    request_id = 42
     work_materials = []
 
 
@@ -40,6 +41,28 @@ def test_act_table_has_work_date_column():
     assert tables, "Таблица работ не найдена"
     header = [cell.text for cell in tables[0].rows[0].cells]
     assert "Дата работ" in header, f"Столбец 'Дата работ' отсутствует: {header}"
+
+
+def test_act_table_has_request_id_column():
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    tables = [t for t in doc.tables if any(cell.text == "Наименование работ" for cell in t.rows[0].cells)]
+    assert tables, "Таблица работ не найдена"
+    header = [cell.text for cell in tables[0].rows[0].cells]
+    assert "№ заявки" in header, f"Столбец '№ заявки' отсутствует: {header}"
+    row_values = [cell.text for cell in tables[0].rows[1].cells]
+    assert row_values[1] == "42", f"Номер заявки не выведен: {row_values}"
+
+
+def test_act_table_request_id_is_blank_for_unlinked_work():
+    class UnlinkedFakeWork(FakeWork):
+        request_id = None
+
+    output = generate_act_docx([UnlinkedFakeWork()])
+    doc = Document(output)
+    tables = [t for t in doc.tables if any(cell.text == "Наименование работ" for cell in t.rows[0].cells)]
+    row_values = [cell.text for cell in tables[0].rows[1].cells]
+    assert row_values[1] == "", f"Поле № заявки должно быть пустым: {row_values}"
 
 
 def test_act_header_date_is_russian():

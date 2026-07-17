@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { requestsAPI, usersAPI, buildingsAPI, getUploadUrl } from '../api';
+import { requestsAPI, usersAPI, buildingsAPI, servicesAPI, getUploadUrl } from '../api';
 
 const STATUS_LABELS = {
   new: 'Новая',
@@ -29,10 +29,13 @@ export default function RequestDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [buildings, setBuildings] = useState([]);
+  const [services, setServices] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedServiceId, setSelectedServiceId] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editedDescription, setEditedDescription] = useState('');
   const [editedBuildingId, setEditedBuildingId] = useState('');
+  const [editedServiceId, setEditedServiceId] = useState('');
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -76,6 +79,15 @@ export default function RequestDetailPage() {
     }
   }, []);
 
+  const loadServices = useCallback(async () => {
+    try {
+      const res = await servicesAPI.list();
+      setServices((res.data.items || []).filter((s) => s.is_active));
+    } catch (e) {
+      setServices([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadRequest();
   }, [loadRequest]);
@@ -84,13 +96,15 @@ export default function RequestDetailPage() {
     if (user?.role === 'director' || user?.role === 'admin') {
       loadUsers();
       loadBuildings();
+      loadServices();
     }
-  }, [loadUsers, loadBuildings, user?.role]);
+  }, [loadUsers, loadBuildings, loadServices, user?.role]);
 
   useEffect(() => {
     if (req) {
       setEditedDescription(req.description || '');
       setEditedBuildingId(req.building?.id || '');
+      setEditedServiceId(req.service?.id || '');
     }
   }, [req?.id]);
 
@@ -116,8 +130,14 @@ export default function RequestDetailPage() {
 
   const handleAssign = async () => {
     if (!selectedUserId) return;
-    await handleAction(requestsAPI.assign, id, parseInt(selectedUserId, 10));
+    await handleAction(
+      requestsAPI.assign,
+      id,
+      parseInt(selectedUserId, 10),
+      selectedServiceId ? parseInt(selectedServiceId, 10) : undefined
+    );
     setSelectedUserId('');
+    setSelectedServiceId('');
   };
 
   const handleUpdate = async () => {
@@ -129,6 +149,9 @@ export default function RequestDetailPage() {
       }
       if (editedBuildingId && parseInt(editedBuildingId, 10) !== req.building?.id) {
         payload.building_id = parseInt(editedBuildingId, 10);
+      }
+      if (editedServiceId && parseInt(editedServiceId, 10) !== req.service?.id) {
+        payload.service_id = parseInt(editedServiceId, 10);
       }
       if (Object.keys(payload).length === 0) {
         setEditMode(false);
@@ -223,6 +246,23 @@ export default function RequestDetailPage() {
               )}
             </div>
             <div style={styles.row}>
+              <span style={styles.label}>Услуга</span>
+              {editMode ? (
+                <select
+                  value={editedServiceId}
+                  onChange={(e) => setEditedServiceId(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="">Выберите услугу</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={styles.value}>{req.service?.name || 'Не назначена'}</span>
+              )}
+            </div>
+            <div style={styles.row}>
               <span style={styles.label}>Описание</span>
               {editMode ? (
                 <textarea
@@ -285,6 +325,17 @@ export default function RequestDetailPage() {
                       <option value="">Выберите исполнителя</option>
                       {users.map((u) => (
                         <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={selectedServiceId}
+                      onChange={(e) => setSelectedServiceId(e.target.value)}
+                      disabled={actionLoading}
+                      style={{ ...styles.select, minWidth: '160px' }}
+                    >
+                      <option value="">Выберите услугу</option>
+                      {services.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
                     <button

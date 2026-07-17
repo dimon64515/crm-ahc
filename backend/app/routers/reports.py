@@ -474,14 +474,14 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
 
     # Таблица работ
     add_text("7. Объем оказанных услуг:", bold=True)
-    table2 = doc.add_table(rows=1, cols=8)
+    table2 = doc.add_table(rows=1, cols=9)
     table2.style = "Table Grid"
     table2.autofit = False
     table2.allow_autofit = False
 
     hdr2 = table2.rows[0].cells
-    headers2 = ["№", "Дата работ", "Адрес объекта", "Наименование работ", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость работ (услуг) руб."]
-    widths2 = [Cm(1.0), Cm(2.2), Cm(2.8), Cm(4.5), Cm(1.5), Cm(2.0), Cm(2.5), Cm(3.0)]
+    headers2 = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование работ", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость работ (услуг) руб."]
+    widths2 = [Cm(1.0), Cm(1.5), Cm(2.2), Cm(2.8), Cm(3.8), Cm(1.5), Cm(2.0), Cm(2.5), Cm(3.0)]
     for i, (h, w) in enumerate(zip(headers2, widths2)):
         hdr2[i].text = h
         hdr2[i].width = w
@@ -498,6 +498,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
         work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
         values = [
             str(idx),
+            str(work.request_id) if work.request_id else "",
             work_date_str,
             address,
             work.service.name,
@@ -516,15 +517,15 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
         row[0].text = str(len(works) + i + 1)
 
     total_row2 = table2.add_row().cells
-    total_row2[0].merge(total_row2[6])
+    total_row2[0].merge(total_row2[7])
     total_row2[0].text = "Итого:"
-    total_row2[7].text = f"{float(service_total):.2f}"
+    total_row2[8].text = f"{float(service_total):.2f}"
     for paragraph in total_row2[0].paragraphs:
         for run in paragraph.runs:
             run.font.bold = True
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
-    for paragraph in total_row2[7].paragraphs:
+    for paragraph in total_row2[8].paragraphs:
         for run in paragraph.runs:
             run.font.bold = True
             run.font.name = "Times New Roman"

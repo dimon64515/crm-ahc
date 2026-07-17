@@ -1,5 +1,6 @@
 import zipfile
 from datetime import date, timedelta
+from decimal import Decimal
 from io import BytesIO
 from unittest.mock import ANY, patch
 
@@ -10,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
-from app.models import User, Building, Request, PushSubscription
+from app.models import User, Building, Request, PushSubscription, Service, Work
 from app.core.security import get_password_hash
 import app.routers.requests as requests_module
 
@@ -177,11 +178,13 @@ def test_contractor_can_complete_own_request():
     watchman = User(username="watchman_complete", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
     contractor = User(username="contractor_complete", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
     building = Building(number="14", name="Корпус 14", is_active=True)
-    db.add_all([watchman, contractor, building])
+    service = Service(name="Мелкий ремонт", unit="шт", price=Decimal("300.00"), is_active=True)
+    db.add_all([watchman, contractor, building, service])
     db.commit()
+    db.refresh(service)
 
     req = Request(building_id=building.id, description="Завершить", status="in_progress", created_by=watchman.id,
-                  assigned_to=contractor.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+                  assigned_to=contractor.id, service_id=service.id, due_date=date.today() + timedelta(days=5), extended_count=0)
     db.add(req)
     db.commit()
     db.refresh(req)
@@ -545,4 +548,101 @@ def test_print_missing_request_returns_404():
         json={"ids": [99999]},
     )
     assert response.status_code == 404, response.text
+    db.close()
+
+
+def test_director_can_assign_request_with_service():
+    db = TestingSessionLocal()
+    director = User(username="director_assign_svc", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_assign_svc", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    watchman = User(username="watchman_assign_svc", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    building = Building(number="60", name="Корпус 60", is_active=True)
+    service = Service(name="Ремонт кровли", unit="м2", price=Decimal("1200.00"), is_active=True)
+    db.add_all([director, contractor, watchman, building, service])
+    db.commit()
+    db.refresh(service)
+
+    req = Request(building_id=building.id, description="Назначить с услугой", status="new", created_by=watchman.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_assign_svc", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/assign",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"user_id": contractor.id, "service_id": service.id},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "in_progress"
+    assert data["executor"]["id"] == contractor.id
+    assert data["service"]["id"] == service.id
+    db.close()
+
+
+def test_complete_request_without_service_returns_400():
+    db = TestingSessionLocal()
+    watchman = User(username="watchman_complete_no_svc", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    contractor = User(username="contractor_complete_no_svc", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="61", name="Корпус 61", is_active=True)
+    db.add_all([watchman, contractor, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Без услуги", status="in_progress", created_by=watchman.id,
+                  assigned_to=contractor.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_complete_no_svc", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/complete",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 400, response.text
+    db.close()
+
+
+def test_complete_request_creates_work():
+    db = TestingSessionLocal()
+    watchman = User(username="watchman_complete_work", hashed_password=get_password_hash("pass"), role="watchman", is_active=True)
+    contractor = User(username="contractor_complete_work", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="62", name="Корпус 62", is_active=True)
+    service = Service(name="Замена лампочки", unit="шт", price=Decimal("250.00"), is_active=True)
+    db.add_all([watchman, contractor, building, service])
+    db.commit()
+    db.refresh(service)
+
+    req = Request(building_id=building.id, description="Заменить лампочку", status="in_progress", created_by=watchman.id,
+                  assigned_to=contractor.id, service_id=service.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "contractor_complete_work", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/complete",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "completed"
+
+    work = db.query(Work).filter(Work.request_id == req.id).first()
+    assert work is not None
+    assert work.user_id == contractor.id
+    assert work.building_id == building.id
+    assert work.service_id == service.id
+    assert work.service_quantity == 1
+    assert work.service_unit_price == service.price
+    assert work.total_price == service.price
+    assert work.description == req.description
     db.close()

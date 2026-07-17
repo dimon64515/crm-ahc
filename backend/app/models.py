@@ -71,6 +71,7 @@ class Work(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     building_id = Column(Integer, ForeignKey("buildings.id"), nullable=False)
     service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    request_id = Column(Integer, ForeignKey("requests.id"), nullable=True)
     work_date = Column(Date, nullable=False)
     description = Column(Text)
     service_quantity = Column(DECIMAL(10, 2))
@@ -84,6 +85,7 @@ class Work(Base):
     user = relationship("User", back_populates="works")
     building = relationship("Building", back_populates="works")
     service = relationship("Service", back_populates="works")
+    request = relationship("Request")
     photos = relationship("WorkPhoto", back_populates="work", cascade="all, delete-orphan")
     files = relationship("WorkFile", back_populates="work", cascade="all, delete-orphan")
     work_materials = relationship("WorkMaterial", back_populates="work", cascade="all, delete-orphan")
@@ -159,6 +161,7 @@ class Request(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     building_id = Column(Integer, ForeignKey("buildings.id"), nullable=False)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
     description = Column(Text, nullable=False)
     status = Column(String(20), nullable=False, default="new")
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -169,6 +172,7 @@ class Request(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     building = relationship("Building")
+    service = relationship("Service")
     creator = relationship("User", foreign_keys=[created_by])
     executor = relationship("User", foreign_keys=[assigned_to])
     photos = relationship("RequestPhoto", back_populates="request", cascade="all, delete-orphan")
