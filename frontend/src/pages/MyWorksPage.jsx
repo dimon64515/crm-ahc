@@ -37,6 +37,19 @@ export default function MyWorksPage() {
     return new Date(d).toLocaleDateString('ru-RU');
   };
 
+  const formatServices = (services) => {
+    if (!services || services.length === 0) return '—';
+    const first = services[0].name || '—';
+    if (services.length === 1) return first;
+    return `${first} +${services.length - 1}`;
+  };
+
+  const formatServiceQuantity = (services) => {
+    if (!services || services.length === 0) return '—';
+    if (services.length === 1) return services[0].quantity;
+    return `${services.length} усл.`;
+  };
+
   return (
     <div>
       <div style={styles.header}>
@@ -70,8 +83,8 @@ export default function MyWorksPage() {
                 <td className="tabular-nums">{w.id}</td>
                 <td className="tabular-nums">{formatDate(w.work_date)}</td>
                 <td>{w.building?.name || w.building?.number || '—'}</td>
-                <td>{w.service?.name || '—'}</td>
-                <td style={{ textAlign: 'center' }} className="tabular-nums">{w.service_quantity}</td>
+                <td>{formatServices(w.services)}</td>
+                <td style={{ textAlign: 'center' }} className="tabular-nums">{formatServiceQuantity(w.services)}</td>
                 <td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={w.description}>{w.description || '—'}</td>
                 <td style={{ textAlign: 'center' }} className="tabular-nums">{w.photos_count || 0}</td>
                 <td style={{ textAlign: 'right' }}>

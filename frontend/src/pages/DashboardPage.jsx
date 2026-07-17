@@ -89,11 +89,14 @@ function DetailedReport() {
       const res = await worksAPI.list(p);
       setWorks(res.data.items || []);
       setTotal(res.data.total || 0);
-      const t = (res.data.items || []).reduce((acc, w) => ({
-        service_total: acc.service_total + parseFloat(w.service_total_price || 0),
-        materials_total: acc.materials_total + parseFloat(w.materials_total_price || 0),
-        total: acc.total + parseFloat(w.total_price || 0),
-      }), { service_total: 0, materials_total: 0, total: 0 });
+      const t = (res.data.items || []).reduce((acc, w) => {
+        const serviceTotal = (w.services || []).reduce((sum, s) => sum + parseFloat(s.total_price || 0), 0);
+        return {
+          service_total: acc.service_total + serviceTotal,
+          materials_total: acc.materials_total + parseFloat(w.materials_total_price || 0),
+          total: acc.total + parseFloat(w.total_price || 0),
+        };
+      }, { service_total: 0, materials_total: 0, total: 0 });
       setTotals(t);
     } catch (e) {} finally { setLoading(false); }
   };
@@ -127,13 +130,28 @@ function DetailedReport() {
     }
   };
 
-  const handleInlinePriceEdit = async (workId, currentPrice) => {
-    const val = prompt('Новая цена за ед. работы:', currentPrice || '');
-    if (val === null) return;
-    try {
-      await worksAPI.updatePrices(workId, { service_unit_price: parseFloat(val) });
-      loadWorks();
-    } catch (e) { alert('Ошибка обновления цены'); }
+  const handleInlinePriceEdit = async (workId, workServices) => {
+    if (!workServices || workServices.length === 0) return;
+    if (workServices.length === 1) {
+      const val = prompt('Новая цена за ед. работы:', workServices[0].unit_price || '');
+      if (val === null) return;
+      try {
+        await worksAPI.updatePrices(workId, { services: [{ service_id: workServices[0].service_id, unit_price: parseFloat(val) }] });
+        loadWorks();
+      } catch (e) { alert('Ошибка обновления цены'); }
+    } else {
+      const servicesPayload = [];
+      for (const s of workServices) {
+        const val = prompt(`Новая цена за ед. для «${s.name}»:`, s.unit_price || '');
+        if (val === null) continue;
+        servicesPayload.push({ service_id: s.service_id, unit_price: parseFloat(val) });
+      }
+      if (servicesPayload.length === 0) return;
+      try {
+        await worksAPI.updatePrices(workId, { services: servicesPayload });
+        loadWorks();
+      } catch (e) { alert('Ошибка обновления цены'); }
+    }
   };
 
   const totalPages = Math.ceil(total / perPage) || 1;
@@ -213,29 +231,33 @@ function DetailedReport() {
             </tr>
           </thead>
           <tbody>
-            {works.map(w => (
+            {works.map(w => {
+              const serviceTotal = (w.services || []).reduce((sum, s) => sum + parseFloat(s.total_price || 0), 0);
+              const serviceNames = (w.services || []).map(s => s.name).join(', ') || '—';
+              return (
               <tr key={w.id} style={{ cursor: 'pointer' }} onClick={(e) => { if (!e.target.closest('button')) navigate(`/works/${w.id}`); }}>
                 <td>{w.work_date}</td>
                 <td>{w.building?.number}</td>
                 <td>{w.created_by?.full_name || w.created_by?.username}</td>
-                <td>{w.service?.name}</td>
+                <td>{serviceNames}</td>
                 <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={w.description}>{w.description}</td>
-                <td style={{ textAlign: 'center' }}>{w.service?.unit || '—'}</td>
-                <td style={{ textAlign: 'center' }} className="tabular-nums">{w.service_quantity}</td>
+                <td style={{ textAlign: 'center' }}>{(w.services || []).map(s => s.unit).filter(Boolean).join(', ') || '—'}</td>
+                <td style={{ textAlign: 'center' }} className="tabular-nums">{(w.services || []).map(s => s.quantity).join(', ') || '—'}</td>
                 <td style={{ textAlign: 'right' }} className="tabular-nums">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                    <span>{parseFloat(w.service_unit_price || 0).toFixed(2)}</span>
+                    <span>{(w.services || []).map(s => parseFloat(s.unit_price || 0).toFixed(2)).join(', ') || '—'}</span>
                     {user.role === 'admin' && (
-                      <button onClick={(e) => { e.stopPropagation(); handleInlinePriceEdit(w.id, w.service_unit_price); }} style={styles.inlineEditBtn} title="Изменить цену">✎</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleInlinePriceEdit(w.id, w.services); }} style={styles.inlineEditBtn} title="Изменить цену">✎</button>
                     )}
                   </div>
                 </td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(w.service_total_price || 0).toFixed(2)}</td>
+                <td style={{ textAlign: 'right' }} className="tabular-nums">{serviceTotal.toFixed(2)}</td>
                 <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(w.materials_total_price || 0).toFixed(2)}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{parseFloat(w.total_price || 0).toFixed(2)}</td>
                 <td style={{ textAlign: 'center' }}>{w.photos_count}</td>
               </tr>
-            ))}
+              );
+            })}
             {works.length === 0 && !loading && (
               <tr><td colSpan={12} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 16px' }}>
                 <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>

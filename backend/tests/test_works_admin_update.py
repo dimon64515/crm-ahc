@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
-from app.models import User, Building, Service, Material, Work, WorkMaterial
+from app.models import User, Building, Service, Material, Work, WorkMaterial, WorkService
 from app.core.security import get_password_hash
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -25,6 +25,20 @@ def override_get_db():
 
 client = TestClient(app)
 _old_db_override = None
+
+
+def _make_work_service(db, work, service, quantity=Decimal("1.00")):
+    """Создаёт связанную запись WorkService для тестовой работы."""
+    ws = WorkService(
+        work_id=work.id,
+        service_id=service.id,
+        quantity=quantity,
+        unit_price=service.price,
+        total_price=quantity * service.price,
+    )
+    db.add(ws)
+    db.commit()
+    return ws
 
 
 def setup_module():
@@ -56,18 +70,15 @@ def test_admin_can_update_all_work_fields():
     work = Work(
         user_id=contractor.id,
         building_id=building1.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Старое описание",
-        service_quantity=Decimal("5.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("500.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("500.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("5.00"))
 
     login = client.post("/api/auth/login", json={"username": "admin", "password": "pass"})
     token = login.json()["access_token"]
@@ -78,14 +89,12 @@ def test_admin_can_update_all_work_fields():
         json={
             "building_id": building2.id,
             "description": "Новое описание",
-            "service_quantity": "10.00",
         },
     )
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["building"]["number"] == "2"
     assert data["description"] == "Новое описание"
-    assert Decimal(data["service_total_price"]) == Decimal("1000.00")
     db.close()
 
 
@@ -104,18 +113,15 @@ def test_admin_update_service_and_materials_recalculates_prices():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service_old.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("5.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("500.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("500.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service_old, Decimal("5.00"))
 
     login = client.post("/api/auth/login", json={"username": "admin2", "password": "pass"})
     token = login.json()["access_token"]
@@ -124,8 +130,9 @@ def test_admin_update_service_and_materials_recalculates_prices():
         f"/api/works/{work.id}",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "service_id": service_new.id,
-            "service_quantity": "10.00",
+            "services": [
+                {"service_id": service_new.id, "quantity": "10.00"},
+            ],
             "materials": [
                 {"material_id": material1.id, "quantity": "2.00"},
                 {"material_id": material2.id, "quantity": "1.00"},
@@ -134,9 +141,10 @@ def test_admin_update_service_and_materials_recalculates_prices():
     )
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["service"]["name"] == "Новая услуга"
-    assert Decimal(data["service_unit_price"]) == Decimal("200.00")
-    assert Decimal(data["service_total_price"]) == Decimal("2000.00")
+    assert len(data["services"]) == 1
+    assert data["services"][0]["name"] == "Новая услуга"
+    assert Decimal(data["services"][0]["unit_price"]) == Decimal("200.00")
+    assert Decimal(data["services"][0]["total_price"]) == Decimal("2000.00")
     assert Decimal(data["materials_total_price"]) == Decimal("130.00")
     assert Decimal(data["total_price"]) == Decimal("2130.00")
     assert len(data["materials"]) == 2
@@ -156,18 +164,15 @@ def test_admin_can_clear_all_materials():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("2.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("200.00"),
         materials_total_price=Decimal("100.00"),
         total_price=Decimal("300.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("2.00"))
 
     work_material = WorkMaterial(work_id=work.id, material_id=material.id, quantity=Decimal("2.00"), unit_price=Decimal("50.00"), total_price=Decimal("100.00"))
     db.add(work_material)
@@ -201,18 +206,15 @@ def test_director_cannot_update_work():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("1.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("100.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("100.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("1.00"))
 
     login = client.post("/api/auth/login", json={"username": "director1", "password": "pass"})
     token = login.json()["access_token"]
@@ -239,18 +241,15 @@ def test_contractor_update_is_forbidden():
     work = Work(
         user_id=contractor.id,
         building_id=building_a.id,
-        service_id=service_a.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("2.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("200.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("200.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service_a, Decimal("2.00"))
 
     login = client.post("/api/auth/login", json={"username": "contractor4", "password": "pass"})
     token = login.json()["access_token"]
@@ -260,7 +259,9 @@ def test_contractor_update_is_forbidden():
         headers={"Authorization": f"Bearer {token}"},
         json={
             "building_id": building_b.id,
-            "service_id": service_b.id,
+            "services": [
+                {"service_id": service_b.id, "quantity": "2.00"},
+            ],
             "description": "Новое описание подрядчика",
         },
     )
@@ -283,18 +284,15 @@ def test_admin_partial_update_preserves_materials():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Старое описание",
-        service_quantity=Decimal("2.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("200.00"),
         materials_total_price=Decimal("100.00"),
         total_price=Decimal("300.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("2.00"))
 
     work_material = WorkMaterial(
         work_id=work.id,
@@ -340,18 +338,15 @@ def test_admin_update_inactive_material_returns_400_and_preserves_materials():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("2.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("200.00"),
         materials_total_price=Decimal("100.00"),
         total_price=Decimal("300.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("2.00"))
 
     work_material = WorkMaterial(
         work_id=work.id,
@@ -400,18 +395,15 @@ def test_admin_update_duplicate_material_returns_400():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("1.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("100.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("100.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("1.00"))
 
     login = client.post("/api/auth/login", json={"username": "admin_dup", "password": "pass"})
     token = login.json()["access_token"]
@@ -443,18 +435,15 @@ def test_admin_update_inactive_building_returns_400():
     work = Work(
         user_id=contractor.id,
         building_id=building_active.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("1.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("100.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("100.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("1.00"))
 
     login = client.post("/api/auth/login", json={"username": "admin_inactive_bld", "password": "pass"})
     token = login.json()["access_token"]
@@ -482,18 +471,15 @@ def test_admin_update_non_contractor_user_returns_400():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("1.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("100.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("100.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("1.00"))
 
     login = client.post("/api/auth/login", json={"username": "admin_non_contractor", "password": "pass"})
     token = login.json()["access_token"]
@@ -520,18 +506,15 @@ def test_admin_update_future_work_date_returns_400():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("1.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("100.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("100.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("1.00"))
 
     login = client.post("/api/auth/login", json={"username": "admin_future", "password": "pass"})
     token = login.json()["access_token"]
@@ -559,18 +542,15 @@ def test_contractor_update_future_work_date_is_forbidden():
     work = Work(
         user_id=contractor.id,
         building_id=building.id,
-        service_id=service.id,
         work_date=date(2026, 6, 1),
         description="Описание",
-        service_quantity=Decimal("1.00"),
-        service_unit_price=Decimal("100.00"),
-        service_total_price=Decimal("100.00"),
         materials_total_price=Decimal("0"),
         total_price=Decimal("100.00"),
     )
     db.add(work)
     db.commit()
     db.refresh(work)
+    _make_work_service(db, work, service, Decimal("1.00"))
 
     login = client.post("/api/auth/login", json={"username": "contractor_future2", "password": "pass"})
     token = login.json()["access_token"]

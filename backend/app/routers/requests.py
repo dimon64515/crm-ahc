@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
-from app.models import Request, RequestPhoto, Building, User, Service, Work
+from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate
 from app.core.dependencies import get_current_user, require_comendant, require_executor, require_director, require_admin
 from app.core.config import get_settings
@@ -355,17 +355,23 @@ def complete_request(
         work = Work(
             user_id=executor_id,
             building_id=req.building_id,
-            service_id=req.service_id,
             request_id=req.id,
             work_date=date.today(),
             description=req.description,
-            service_quantity=1,
-            service_unit_price=service.price,
-            service_total_price=service.price,
             materials_total_price=0,
             total_price=service.price,
         )
         db.add(work)
+        db.flush()
+
+        work_service = WorkService(
+            work_id=work.id,
+            service_id=req.service_id,
+            quantity=1,
+            unit_price=service.price,
+            total_price=service.price,
+        )
+        db.add(work_service)
 
     req.status = "completed"
     db.commit()

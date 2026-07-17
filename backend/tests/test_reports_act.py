@@ -23,6 +23,13 @@ class FakeService:
     unit = "м2"
 
 
+class FakeWorkService:
+    service = FakeService()
+    quantity = Decimal("10.5")
+    unit_price = Decimal("1200.00")
+    total_price = Decimal("12600.00")
+
+
 class FakeRequest:
     id = 42
     creator = FakeUser()
@@ -31,10 +38,7 @@ class FakeRequest:
 class FakeWork:
     work_date = date(2026, 6, 15)
     building = FakeBuilding()
-    service = FakeService()
-    service_quantity = Decimal("10.5")
-    service_unit_price = Decimal("1200.00")
-    service_total_price = Decimal("12600.00")
+    work_services = [FakeWorkService()]
     total_price = Decimal("12600.00")
     request_id = 42
     request = FakeRequest()

@@ -47,7 +47,7 @@ class Service(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    works = relationship("Work", back_populates="service")
+    work_services = relationship("WorkService", back_populates="service")
 
 
 class Material(Base):
@@ -70,13 +70,9 @@ class Work(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     building_id = Column(Integer, ForeignKey("buildings.id"), nullable=False)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
     request_id = Column(Integer, ForeignKey("requests.id"), nullable=True)
     work_date = Column(Date, nullable=False)
     description = Column(Text)
-    service_quantity = Column(DECIMAL(10, 2))
-    service_unit_price = Column(DECIMAL(12, 2))
-    service_total_price = Column(DECIMAL(12, 2))
     materials_total_price = Column(DECIMAL(12, 2), default=0)
     total_price = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -84,11 +80,11 @@ class Work(Base):
     
     user = relationship("User", back_populates="works")
     building = relationship("Building", back_populates="works")
-    service = relationship("Service", back_populates="works")
     request = relationship("Request")
     photos = relationship("WorkPhoto", back_populates="work", cascade="all, delete-orphan")
     files = relationship("WorkFile", back_populates="work", cascade="all, delete-orphan")
     work_materials = relationship("WorkMaterial", back_populates="work", cascade="all, delete-orphan")
+    work_services = relationship("WorkService", back_populates="work", cascade="all, delete-orphan")
 
 
 class WorkMaterial(Base):
@@ -106,6 +102,24 @@ class WorkMaterial(Base):
     
     __table_args__ = (
         UniqueConstraint('work_id', 'material_id', name='uix_work_material'),
+    )
+
+
+class WorkService(Base):
+    __tablename__ = "work_services"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="CASCADE"), nullable=False)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    quantity = Column(DECIMAL(10, 2), nullable=False)
+    unit_price = Column(DECIMAL(12, 2), nullable=False)
+    total_price = Column(DECIMAL(12, 2), nullable=False)
+    
+    work = relationship("Work", back_populates="work_services")
+    service = relationship("Service", back_populates="work_services")
+    
+    __table_args__ = (
+        UniqueConstraint('work_id', 'service_id', name='uix_work_service'),
     )
 
 

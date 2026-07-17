@@ -14,11 +14,10 @@ export default function WorkDetailPage() {
   const [editMode, setEditMode] = useState(false);
   const [edited, setEdited] = useState({
     description: '',
-    service_quantity: '',
     work_date: '',
     building_id: '',
-    service_id: '',
     user_id: '',
+    services: [],
     materials: [],
   });
   const [buildings, setBuildings] = useState([]);
@@ -36,11 +35,14 @@ export default function WorkDetailPage() {
       setWork(res.data);
       setEdited({
         description: res.data.description || '',
-        service_quantity: res.data.service_quantity ?? '',
         work_date: res.data.work_date || '',
         building_id: res.data.building?.id || '',
-        service_id: res.data.service?.id || '',
         user_id: res.data.created_by?.id || '',
+        services: (res.data.services || []).map(s => ({
+          service_id: s.service_id,
+          quantity: s.quantity,
+          unit_price: s.unit_price,
+        })),
         materials: (res.data.materials || []).map(m => ({ material_id: m.material_id, quantity: m.quantity })),
       });
     } catch {
@@ -91,13 +93,20 @@ export default function WorkDetailPage() {
     catch { alert('Ошибка удаления файла'); }
   };
 
-  const handlePriceEdit = async (type, newPrice, materialId = null) => {
+  const handlePriceEdit = async (type, newPrice, idArg = null) => {
     try {
-      const prices = { service_unit_price: undefined, materials: [] };
+      const prices = { services: [], materials: [] };
       if (type === 'service') {
-        prices.service_unit_price = parseFloat(newPrice);
-      } else if (type === 'material' && materialId) {
-        prices.materials = [{ material_id: materialId, unit_price: parseFloat(newPrice) }];
+        if (idArg) {
+          prices.services = [{ service_id: idArg, unit_price: parseFloat(newPrice) }];
+        } else if (work.services && work.services.length === 1) {
+          prices.services = [{ service_id: work.services[0].service_id, unit_price: parseFloat(newPrice) }];
+        } else {
+          alert('Выберите услугу для изменения цены');
+          return;
+        }
+      } else if (type === 'material' && idArg) {
+        prices.materials = [{ material_id: idArg, unit_price: parseFloat(newPrice) }];
       }
       await worksAPI.updatePrices(id, prices);
       loadWork();
@@ -117,29 +126,32 @@ export default function WorkDetailPage() {
       payload.work_date = edited.work_date;
     }
 
-    // Количество: нормализуем разделитель (запятая → точка) и проверяем
-    if (edited.service_quantity !== '' && edited.service_quantity !== undefined && edited.service_quantity !== null) {
-      const qtyStr = String(edited.service_quantity).replace(',', '.').trim();
-      const qty = parseFloat(qtyStr);
-      if (Number.isNaN(qty) || qty <= 0) {
-        alert('Количество должно быть числом больше 0');
-        return;
-      }
-      const originalQty = parseFloat(String(work.service_quantity).replace(',', '.').trim());
-      if (qty !== originalQty) {
-        payload.service_quantity = qty;
-      }
-    }
-
     if (user.role === 'admin') {
       if (edited.building_id && edited.building_id !== work.building?.id) {
         payload.building_id = parseInt(edited.building_id);
       }
-      if (edited.service_id && edited.service_id !== work.service?.id) {
-        payload.service_id = parseInt(edited.service_id);
-      }
       if (edited.user_id && edited.user_id !== work.created_by?.id) {
         payload.user_id = parseInt(edited.user_id);
+      }
+
+      // Услуги отправляем только если список действительно изменился
+      const originalServices = (work.services || []).map(s => ({
+        service_id: parseInt(s.service_id),
+        quantity: parseFloat(String(s.quantity).replace(',', '.')),
+      }));
+      const servicesPayload = (edited.services || [])
+        .filter(s => s.service_id && s.quantity)
+        .map(s => ({
+          service_id: parseInt(s.service_id),
+          quantity: parseFloat(String(s.quantity).replace(',', '.')),
+        }));
+      const serviceIdsChanged = servicesPayload.length !== originalServices.length ||
+        servicesPayload.some((s, idx) => {
+          const orig = originalServices[idx];
+          return !orig || s.service_id !== orig.service_id || s.quantity !== orig.quantity;
+        });
+      if (serviceIdsChanged) {
+        payload.services = servicesPayload;
       }
 
       // Материалы отправляем только если список действительно изменился,
@@ -208,6 +220,8 @@ export default function WorkDetailPage() {
     finally { setUploading(false); e.target.value = ''; }
   };
 
+  const serviceTotalPrice = (work?.services || []).reduce((sum, s) => sum + parseFloat(s.total_price || 0), 0);
+
   if (loading) return (
     <div style={styles.center}>
       <div style={styles.spinner} />
@@ -250,7 +264,7 @@ export default function WorkDetailPage() {
             <h1 style={styles.title}>Запись №{work.id}</h1>
             <p style={styles.meta}>Дата: <strong className="tabular-nums">{work.work_date}</strong> · Корпус: <strong>{work.building?.number}</strong></p>
           </div>
-          <div style={styles.badge}>{work.service?.name}</div>
+          <div style={styles.badge}>{(work.services || []).map(s => s.name).join(', ') || '—'}</div>
         </div>
 
         {work.request_id && (
@@ -282,8 +296,46 @@ export default function WorkDetailPage() {
         </div>
 
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Количество</h3>
-          <p style={styles.text}>{work.service_quantity} {work.service?.unit || ''}</p>
+          <h3 style={styles.sectionTitle}>Услуги</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th>Наименование</th>
+                  <th style={{ textAlign: 'center' }}>Кол-во</th>
+                  <th style={{ textAlign: 'center' }}>Ед. изм.</th>
+                  {user.role === 'admin' && (
+                    <>
+                      <th style={{ textAlign: 'right' }}>Цена</th>
+                      <th style={{ textAlign: 'right' }}>Сумма</th>
+                      <th style={{ textAlign: 'right' }}>Действие</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {(work.services || []).map((s, idx) => (
+                  <tr key={idx}>
+                    <td>{s.name || '—'}</td>
+                    <td style={{ textAlign: 'center' }} className="tabular-nums">{s.quantity}</td>
+                    <td style={{ textAlign: 'center' }}>{s.unit || '—'}</td>
+                    {user.role === 'admin' && (
+                      <>
+                        <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(s.unit_price || 0).toFixed(2)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{parseFloat(s.total_price || 0).toFixed(2)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button onClick={() => {
+                            const val = prompt('Новая цена за ед.:', s.unit_price || '');
+                            if (val !== null) handlePriceEdit('service', val, s.service_id);
+                          }} style={styles.smallLink}>Изменить</button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {editMode && (
@@ -291,10 +343,6 @@ export default function WorkDetailPage() {
             <div style={styles.field}>
               <label style={styles.label}>Дата работы</label>
               <input type="date" value={edited.work_date} onChange={e => setEdited({ ...edited, work_date: e.target.value })} style={styles.input} />
-            </div>
-            <div style={styles.field}>
-              <label style={styles.label}>Количество</label>
-              <input type="number" min="0" step="0.01" value={edited.service_quantity} onChange={e => setEdited({ ...edited, service_quantity: e.target.value })} style={styles.input} />
             </div>
           </div>
         )}
@@ -309,19 +357,40 @@ export default function WorkDetailPage() {
               </select>
             </div>
             <div style={styles.field}>
-              <label style={styles.label}>Вид работ</label>
-              <select value={edited.service_id} onChange={e => setEdited({ ...edited, service_id: e.target.value })} style={styles.input}>
-                <option value="">Выберите вид работ</option>
-                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div style={styles.field}>
               <label style={styles.label}>Подрядчик</label>
               <select value={edited.user_id} onChange={e => setEdited({ ...edited, user_id: e.target.value })} style={styles.input}>
                 <option value="">Выберите подрядчика</option>
                 {contractors.map(u => <option key={u.id} value={u.id}>{u.full_name || u.username}</option>)}
               </select>
             </div>
+          </div>
+        )}
+
+        {editMode && user.role === 'admin' && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Услуги</h3>
+            {(edited.services || []).map((s, idx) => (
+              <div key={idx} style={{ ...styles.row, alignItems: 'flex-end' }}>
+                <div style={{ ...styles.field, flex: 2 }}>
+                  <label style={styles.label}>Вид работ</label>
+                  <select value={s.service_id} onChange={e => {
+                    const value = parseInt(e.target.value);
+                    setEdited({ ...edited, services: edited.services.map((item, i) => i === idx ? { ...item, service_id: value } : item) });
+                  }} style={styles.input}>
+                    <option value="">Выберите вид работ</option>
+                    {services.map(svc => <option key={svc.id} value={svc.id}>{svc.name}</option>)}
+                  </select>
+                </div>
+                <div style={styles.field}>
+                  <label style={styles.label}>Кол-во</label>
+                  <input type="number" min="0" step="0.01" value={s.quantity} onChange={e => {
+                    setEdited({ ...edited, services: edited.services.map((item, i) => i === idx ? { ...item, quantity: e.target.value } : item) });
+                  }} style={styles.input} />
+                </div>
+                <button onClick={() => setEdited({ ...edited, services: edited.services.filter((_, i) => i !== idx) })} style={styles.dangerBtn}>Удалить</button>
+              </div>
+            ))}
+            <button onClick={() => setEdited({ ...edited, services: [...edited.services, { service_id: '', quantity: '' }] })} style={styles.secondaryBtn}>+ Добавить услугу</button>
           </div>
         )}
 
@@ -364,14 +433,8 @@ export default function WorkDetailPage() {
           <div style={styles.totalCard}>
             <div style={styles.totalLabel}>Сумма работ</div>
             <div style={styles.totalValue} className="tabular-nums">
-              {parseFloat(work.service_total_price || 0).toFixed(2)}
+              {serviceTotalPrice.toFixed(2)}
             </div>
-            {user.role === 'admin' && (
-              <button onClick={() => {
-                const val = prompt('Новая цена за ед.:', work.service_unit_price || '');
-                if (val !== null) handlePriceEdit('service', val);
-              }} style={styles.editLink}>Изменить</button>
-            )}
           </div>
           <div style={styles.totalCard}>
             <div style={styles.totalLabel}>Сумма материалов</div>

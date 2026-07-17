@@ -8,12 +8,8 @@ export default function WorkFormPage() {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
-  const [selectedService, setSelectedService] = useState(null);
+  const [services, setServices] = useState([{ id: 1, selected: null, quantity: 1, price: '', unit: '', total: 0 }]);
   const [description, setDescription] = useState('');
-  const [serviceQuantity, setServiceQuantity] = useState(1);
-  const [servicePrice, setServicePrice] = useState('');
-  const [serviceUnit, setServiceUnit] = useState('');
-  const [serviceTotal, setServiceTotal] = useState(0);
   const [materials, setMaterials] = useState([{ id: 1, selected: null, quantity: 1, price: '', total: 0 }]);
   const [photos, setPhotos] = useState([]);
   const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
@@ -28,14 +24,15 @@ export default function WorkFormPage() {
   // beforeunload: предупреждение при уходе с несохранённой формой
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (selectedBuilding || selectedService || description || photos.length) {
+      const hasServices = services.some(s => s.selected);
+      if (selectedBuilding || hasServices || description || photos.length) {
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [selectedBuilding, selectedService, description, photos]);
+  }, [selectedBuilding, services, description, photos]);
 
   // Ctrl+Enter — сохранить форму
   const formRef = useRef(null);
@@ -49,10 +46,6 @@ export default function WorkFormPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  useEffect(() => {
-    setServiceTotal(parseFloat(serviceQuantity || 0) * parseFloat(servicePrice || 0));
-  }, [serviceQuantity, servicePrice]);
 
   useEffect(() => {
     const timer = setInterval(() => { saveDraft(); }, 30000);
@@ -83,6 +76,27 @@ export default function WorkFormPage() {
     } catch (e) { return []; }
   }, []);
 
+  const addServiceRow = () => {
+    setServices([...services, { id: Date.now(), selected: null, quantity: 1, price: '', unit: '', total: 0 }]);
+  };
+
+  const removeServiceRow = (id) => { if (services.length <= 1) return; setServices(services.filter(s => s.id !== id)); };
+
+  const updateService = (id, updates) => {
+    setServices(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      const updated = { ...s, ...updates };
+      updated.total = parseFloat(updated.quantity || 0) * parseFloat(updated.price || 0);
+      return updated;
+    }));
+  };
+
+  const checkDuplicateServices = () => {
+    const selected = services.filter(s => s.selected).map(s => s.selected.value);
+    const duplicates = selected.filter((item, index) => selected.indexOf(item) !== index);
+    return duplicates.length > 0;
+  };
+
   const addMaterialRow = () => {
     setMaterials([...materials, { id: Date.now(), selected: null, quantity: 1, price: '', total: 0 }]);
   };
@@ -102,8 +116,9 @@ export default function WorkFormPage() {
     }));
   };
 
+  const getServicesTotal = () => services.reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
   const getMaterialsTotal = () => materials.reduce((sum, m) => sum + parseFloat(m.total || 0), 0);
-  const getGrandTotal = () => serviceTotal + getMaterialsTotal();
+  const getGrandTotal = () => getServicesTotal() + getMaterialsTotal();
 
   const handlePhotoDrop = (e) => { e.preventDefault(); setIsDragging(false); const dropped = Array.from(e.dataTransfer.files); console.log('[WorkForm] dropped', dropped.length, 'files'); handlePhotos(dropped); };
   const handlePhotos = (fileList) => {
@@ -117,21 +132,24 @@ export default function WorkFormPage() {
   };
   const removePhoto = (idx) => { setPhotos(prev => prev.filter((_, i) => i !== idx)); setPhotoCounter(prev => prev - 1); };
 
-
-
   const saveDraft = () => {
-    const draft = { selectedBuilding, selectedService, description, serviceQuantity, servicePrice, workDate };
+    const draft = { selectedBuilding, services, description, materials, workDate };
     localStorage.setItem('work_draft', JSON.stringify(draft));
   };
+
   const loadDraft = () => {
     const raw = localStorage.getItem('work_draft');
     if (!raw) return;
     try {
       const d = JSON.parse(raw);
       setDescription(d.description || '');
-      setServiceQuantity(d.serviceQuantity || 1);
-      setServicePrice(d.servicePrice || '');
       setWorkDate(d.workDate || new Date().toISOString().split('T')[0]);
+      if (d.services && Array.isArray(d.services) && d.services.length > 0) {
+        setServices(d.services.map((s, idx) => ({ ...s, id: s.id || idx + 1, total: parseFloat(s.quantity || 0) * parseFloat(s.price || 0) })));
+      }
+      if (d.materials && Array.isArray(d.materials) && d.materials.length > 0) {
+        setMaterials(d.materials.map((m, idx) => ({ ...m, id: m.id || idx + 1, total: parseFloat(m.quantity || 0) * parseFloat(m.price || 0) })));
+      }
     } catch (e) {}
   };
 
@@ -166,7 +184,12 @@ export default function WorkFormPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedBuilding || !selectedService) { setError('Выберите корпус и вид работы'); return; }
+    if (!selectedBuilding) { setError('Выберите корпус'); return; }
+
+    const selectedServices = services.filter(s => s.selected);
+    if (selectedServices.length === 0) { setError('Выберите хотя бы одну услугу'); return; }
+    if (checkDuplicateServices()) { setError('Услуги не должны дублироваться'); return; }
+
     if (photos.length > 20) { setError(`Максимум 20 фотографий (загружено ${photos.length})`); return; }
     if (photos.length === 0) { setError('Загрузите хотя бы одну фотографию'); return; }
     if (checkDuplicateMaterials()) { setError('Материалы не должны дублироваться'); return; }
@@ -175,11 +198,13 @@ export default function WorkFormPage() {
     const desc = (description || '').trim();
     if (desc.length < 5) { setError('Описание должно быть не менее 5 символов'); return; }
 
-    const qty = parseFloat(serviceQuantity);
-    if (!qty || qty <= 0) { setError('Количество работы должно быть больше 0'); return; }
-
-    const today = new Date().toISOString().split('T')[0];
-    if (workDate > today) { setError('Дата работы не может быть в будущем'); return; }
+    for (const s of selectedServices) {
+      const sq = parseFloat(s.quantity);
+      if (!sq || sq <= 0) {
+        setError(`Количество услуги «${s.selected.label}» должно быть больше 0`);
+        return;
+      }
+    }
 
     const selectedMats = materials.filter(m => m.selected);
     for (const m of selectedMats) {
@@ -190,6 +215,9 @@ export default function WorkFormPage() {
       }
     }
 
+    const today = new Date().toISOString().split('T')[0];
+    if (workDate > today) { setError('Дата работы не может быть в будущем'); return; }
+
     setSubmitting(true);
     setError('');
 
@@ -197,9 +225,11 @@ export default function WorkFormPage() {
       // 1) Создаём работу через JSON
       const payload = {
         building_id: selectedBuilding.value,
-        service_id: selectedService.value,
+        services: selectedServices.map(s => ({
+          service_id: s.selected.value,
+          quantity: parseFloat(s.quantity),
+        })),
         description: desc,
-        service_quantity: qty,
         work_date: workDate,
         materials: selectedMats.map(m => ({
           material_id: m.selected.value,
@@ -220,11 +250,8 @@ export default function WorkFormPage() {
 
       localStorage.removeItem('work_draft');
       setSelectedBuilding(null);
-      setSelectedService(null);
+      setServices([{ id: 1, selected: null, quantity: 1, price: '', unit: '', total: 0 }]);
       setDescription('');
-      setServiceQuantity(1);
-      setServicePrice('');
-      setServiceTotal(0);
       setMaterials([{ id: 1, selected: null, quantity: 1, price: '', total: 0 }]);
       setPhotos([]);
       setPhotoCounter(0);
@@ -293,26 +320,49 @@ export default function WorkFormPage() {
           </div>
         </div>
 
-        <div style={styles.field}>
-          <label htmlFor="service" style={styles.label}>Вид работы <span style={styles.required}>*</span></label>
-          <AsyncSelect
-            id="service"
-            cacheOptions
-            defaultOptions
-            loadOptions={loadServices}
-            value={selectedService}
-            onChange={(val) => { setSelectedService(val); setServiceUnit(val?.unit || ''); if (val?.price !== undefined) setServicePrice(val.price.toFixed(2)); }}
-            placeholder="Введите для поиска…"
-            styles={selectStyles}
-          />
-          {serviceUnit && (
-            <div style={styles.serviceMeta}>Ед. изм.: <strong>{serviceUnit}</strong></div>
+        <div style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Услуги <span style={styles.required}>*</span></h3>
+            <button type="button" onClick={addServiceRow} style={styles.addBtn}>+ Добавить</button>
+          </div>
+          {services.map((s) => (
+            <div key={s.id} style={styles.materialRow}>
+              <div style={{ flex: 2, minWidth: '200px' }}>
+                <AsyncSelect
+                  cacheOptions
+                  defaultOptions
+                  loadOptions={loadServices}
+                  value={s.selected}
+                  onChange={val => updateService(s.id, { selected: val, price: val?.price !== undefined ? val.price.toFixed(2) : s.price, unit: val?.unit || '' })}
+                  placeholder="Вид работы…"
+                  styles={selectStyles}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '100px' }}>
+                <input type="number" min="0" step="0.01" value={s.quantity} onChange={e => updateService(s.id, { quantity: e.target.value })} style={styles.input} placeholder="Кол-во" />
+              </div>
+              {s.unit && (
+                <div style={{ fontSize: '13px', color: '#6b7280', minWidth: '60px' }}>Ед.: <strong>{s.unit}</strong></div>
+              )}
+              {isAdmin && (
+              <>
+              <div style={{ flex: 1, minWidth: '100px' }}>
+                <input type="number" min="0" step="0.01" value={s.price} onChange={e => updateService(s.id, { price: e.target.value })} style={styles.input} placeholder="Цена" />
+              </div>
+              <div style={{ minWidth: '90px' }}>
+                <div style={styles.totalBox} className="tabular-nums">{parseFloat(s.total || 0).toFixed(2)}</div>
+              </div>
+              </>
+              )}
+              <button type="button" onClick={() => removeServiceRow(s.id)} style={styles.removeBtn} aria-label="Удалить услугу" title="Удалить">×</button>
+            </div>
+          ))}
+          {isAdmin && (
+          <div style={styles.materialsTotal}>
+            <span>Сумма услуг:</span>
+            <strong className="tabular-nums">{getServicesTotal().toFixed(2)}</strong>
+          </div>
           )}
-        </div>
-
-        <div style={styles.field}>
-          <label htmlFor="quantity" style={styles.label}>Количество <span style={styles.required}>*</span></label>
-          <input id="quantity" type="number" min="0" step="0.01" value={serviceQuantity} onChange={e => setServiceQuantity(e.target.value)} style={styles.input} />
         </div>
 
         <div style={styles.field}>
@@ -326,22 +376,6 @@ export default function WorkFormPage() {
             rows={3}
           />
         </div>
-
-        {isAdmin && (
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Стоимость работы</h3>
-          <div style={styles.row}>
-            <div style={styles.field}>
-              <label htmlFor="price" style={styles.label}>Цена за ед.</label>
-              <input id="price" type="number" min="0" step="0.01" value={servicePrice} onChange={e => setServicePrice(e.target.value)} style={styles.input} placeholder="0.00" />
-            </div>
-            <div style={styles.field}>
-              <label style={styles.label}>Сумма</label>
-              <div style={styles.totalBox} className="tabular-nums">{serviceTotal.toFixed(2)}</div>
-            </div>
-          </div>
-        </div>
-        )}
 
         <div style={styles.section}>
           <div style={styles.sectionHeader}>

@@ -17,7 +17,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Work, Building, Service, User, WorkMaterial, Request
+from app.models import Work, Building, Service, User, WorkMaterial, WorkService, Request
 from app.schemas import SummaryReportItem
 from app.core.dependencies import get_current_user, require_director
 from app.core.config import get_settings
@@ -44,37 +44,50 @@ def get_summary_report(
         query = query.filter(Work.building_id == int(building_id))
     
     works = query.all()
-    
+
     # Группировка
     groups = {}
     for work in works:
         if group_by == "building":
             key = work.building.number
             name = f"Корпус {work.building.number}"
-        elif group_by == "service":
-            key = work.service.name
-            name = work.service.name
         elif group_by == "contractor":
             key = work.user.full_name or work.user.username
             name = key
         else:
             key = work.work_date.strftime("%Y-%m-%d")
             name = key
-        
-        if key not in groups:
-            groups[key] = {
-                "group_key": key,
-                "group_name": name,
-                "works_count": 0,
-                "service_total": Decimal('0'),
-                "materials_total": Decimal('0'),
-                "total": Decimal('0'),
-            }
-        
-        groups[key]["works_count"] += 1
-        groups[key]["service_total"] += work.service_total_price or 0
-        groups[key]["materials_total"] += work.materials_total_price or 0
-        groups[key]["total"] += work.total_price or 0
+
+        if group_by != "service":
+            if key not in groups:
+                groups[key] = {
+                    "group_key": key,
+                    "group_name": name,
+                    "works_count": 0,
+                    "service_total": Decimal('0'),
+                    "materials_total": Decimal('0'),
+                    "total": Decimal('0'),
+                }
+            groups[key]["works_count"] += 1
+            groups[key]["service_total"] += sum((ws.total_price or Decimal('0')) for ws in work.work_services)
+            groups[key]["materials_total"] += work.materials_total_price or 0
+            groups[key]["total"] += work.total_price or 0
+        else:
+            # Группировка по услугам: каждая услуга работы — отдельная строка
+            for ws in work.work_services:
+                svc_key = ws.service.name
+                svc_name = ws.service.name
+                if svc_key not in groups:
+                    groups[svc_key] = {
+                        "group_key": svc_key,
+                        "group_name": svc_name,
+                        "works_count": 0,
+                        "service_total": Decimal('0'),
+                        "materials_total": Decimal('0'),
+                        "total": Decimal('0'),
+                    }
+                groups[svc_key]["works_count"] += 1
+                groups[svc_key]["service_total"] += ws.total_price or 0
     
     items = list(groups.values())
     totals = {
@@ -110,22 +123,22 @@ def export_works(
     if building_id:
         query = query.filter(Work.building_id == int(building_id))
     if service_id:
-        query = query.filter(Work.service_id == int(service_id))
+        query = query.join(WorkService).filter(WorkService.service_id == int(service_id))
     if user_id:
         query = query.filter(Work.user_id == int(user_id))
-    
+
     works = query.order_by(Work.work_date.desc()).all()
-    
+
     settings = get_settings()
-    
+
     # Определяем максимальное количество фото и материалов
     max_photos = 0
     max_materials = 0
     for work in works:
         max_photos = max(max_photos, len(work.photos or []))
         max_materials = max(max_materials, len(work.work_materials or []))
-    
-    # Формирование DataFrame — каждая работа = 1 строка
+
+    # Формирование DataFrame — каждая услуга работы = 1 строка
     base_columns = [
         "Дата", "Корпус", "Подрядчик", "Вид работы", "Наименование",
         "Ед.изм.", "Кол-во работы", "Цена работы", "Сумма работы",
@@ -138,51 +151,60 @@ def export_works(
         ])
     photo_columns = [f"Фото {i+1}" for i in range(max_photos)] if max_photos else []
     all_columns = base_columns + material_columns + photo_columns
-    
+
     data = []
     photo_map = []  # [(excel_row_idx, col_idx, photo_file_path), ...]
-    
+
     for work in works:
-        row = {
-            "Дата": work.work_date,
-            "Корпус": work.building.number,
-            "Подрядчик": work.user.full_name or work.user.username,
-            "Вид работы": work.service.name,
-            "Наименование": work.description,
-            "Ед.изм.": work.service.unit,
-            "Кол-во работы": float(work.service_quantity) if work.service_quantity else 0,
-            "Цена работы": float(work.service_unit_price) if work.service_unit_price else 0,
-            "Сумма работы": float(work.service_total_price) if work.service_total_price else 0,
-            "Сумма материалов": float(work.materials_total_price) if work.materials_total_price else 0,
-            "ИТОГО": float(work.total_price) if work.total_price else 0,
-        }
-        
-        for i, wm in enumerate(work.work_materials or []):
-            row[f"Материал {i+1}"] = wm.material.name
-            row[f"Кол-во {i+1}"] = float(wm.quantity)
-            row[f"Цена {i+1}"] = float(wm.unit_price)
-            row[f"Сумма {i+1}"] = float(wm.total_price)
-        
-        work_photos = work.photos or []
-        for i, photo in enumerate(work_photos):
-            row[f"Фото {i+1}"] = photo.filename
-        
-        data.append(row)
-        photo_map.append(work_photos)
-    
+        work_services = list(work.work_services or [])
+        if not work_services:
+            # Защита от некорректных данных
+            work_services = [None]
+
+        for svc_idx, ws_item in enumerate(work_services):
+            row = {
+                "Дата": work.work_date,
+                "Корпус": work.building.number,
+                "Подрядчик": work.user.full_name or work.user.username,
+                "Вид работы": ws_item.service.name if ws_item else "—",
+                "Наименование": work.description if svc_idx == 0 else "",
+                "Ед.изм.": ws_item.service.unit if ws_item else "",
+                "Кол-во работы": float(ws_item.quantity) if ws_item else 0,
+                "Цена работы": float(ws_item.unit_price) if ws_item else 0,
+                "Сумма работы": float(ws_item.total_price) if ws_item else 0,
+                "Сумма материалов": float(work.materials_total_price) if svc_idx == 0 and work.materials_total_price else 0,
+                "ИТОГО": float(work.total_price) if svc_idx == 0 and work.total_price else 0,
+            }
+
+            if svc_idx == 0:
+                for i, wm in enumerate(work.work_materials or []):
+                    row[f"Материал {i+1}"] = wm.material.name
+                    row[f"Кол-во {i+1}"] = float(wm.quantity)
+                    row[f"Цена {i+1}"] = float(wm.unit_price)
+                    row[f"Сумма {i+1}"] = float(wm.total_price)
+
+                work_photos = work.photos or []
+                for i, photo in enumerate(work_photos):
+                    row[f"Фото {i+1}"] = photo.filename
+                photo_map.append(work_photos)
+            else:
+                photo_map.append([])
+
+            data.append(row)
+
     df = pd.DataFrame(data, columns=all_columns)
-    
+
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Работы')
         ws = writer.sheets['Работы']
-        
+
         # Настройка колонок фото
         for i in range(max_photos):
             col_idx = len(base_columns) + len(material_columns) + i + 1  # 1-based
             col_letter = get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = 22
-        
+
         # Вставка изображений
         for row_idx, photos in enumerate(photo_map, start=2):  # start=2 т.к. первая строка — заголовок
             if not photos:
@@ -500,29 +522,32 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
                 run.font.size = Pt(10)
 
     service_total = Decimal("0")
-    for idx, work in enumerate(works, start=1):
-        row = table2.add_row().cells
+    row_num = 1
+    for work in works:
         address = f"{work.building.number} {work.building.name or ''}".strip()
         work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
-        values = [
-            str(idx),
-            str(work.request_id) if work.request_id else "",
-            work_date_str,
-            address,
-            work.service.name,
-            str(work.service_quantity),
-            work.service.unit or "",
-            f"{float(work.service_unit_price or 0):.2f}",
-            f"{float(work.service_total_price or 0):.2f}",
-        ]
-        for i, val in enumerate(values):
-            row[i].text = val
-            row[i].width = widths2[i]
-        service_total += work.service_total_price or Decimal("0")
+        for ws in work.work_services:
+            row = table2.add_row().cells
+            values = [
+                str(row_num),
+                str(work.request_id) if work.request_id else "",
+                work_date_str,
+                address,
+                ws.service.name,
+                str(ws.quantity),
+                ws.service.unit or "",
+                f"{float(ws.unit_price or 0):.2f}",
+                f"{float(ws.total_price or 0):.2f}",
+            ]
+            for i, val in enumerate(values):
+                row[i].text = val
+                row[i].width = widths2[i]
+            service_total += ws.total_price or Decimal("0")
+            row_num += 1
 
-    for i in range(2 - len(works)):
+    for i in range(2 - (row_num - 1)):
         row = table2.add_row().cells
-        row[0].text = str(len(works) + i + 1)
+        row[0].text = str(row_num + i)
 
     total_row2 = table2.add_row().cells
     total_row2[0].merge(total_row2[7])
@@ -574,7 +599,7 @@ def export_act(
     if building_id:
         query = query.filter(Work.building_id == int(building_id))
     if service_id:
-        query = query.filter(Work.service_id == int(service_id))
+        query = query.join(WorkService).filter(WorkService.service_id == int(service_id))
     if user_id:
         query = query.filter(Work.user_id == int(user_id))
 

@@ -640,9 +640,10 @@ def test_complete_request_creates_work():
     assert work is not None
     assert work.user_id == contractor.id
     assert work.building_id == building.id
-    assert work.service_id == service.id
-    assert work.service_quantity == 1
-    assert work.service_unit_price == service.price
+    assert len(work.work_services) == 1
+    assert work.work_services[0].service_id == service.id
+    assert work.work_services[0].quantity == 1
+    assert work.work_services[0].unit_price == service.price
     assert work.total_price == service.price
     assert work.description == req.description
     db.close()

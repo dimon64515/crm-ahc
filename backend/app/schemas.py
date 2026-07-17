@@ -127,6 +127,23 @@ class WorkMaterialResponse(BaseModel):
         from_attributes = True
 
 
+class WorkServiceCreate(BaseModel):
+    service_id: int
+    quantity: Decimal = Field(gt=0)
+
+
+class WorkServiceResponse(BaseModel):
+    service_id: int
+    name: str
+    unit: Optional[str]
+    quantity: Decimal
+    unit_price: Decimal
+    total_price: Decimal
+    
+    class Config:
+        from_attributes = True
+
+
 class WorkPhotoResponse(BaseModel):
     id: int
     filename: str
@@ -154,8 +171,7 @@ class WorkFileResponse(BaseModel):
 class WorkCreate(BaseModel):
     building_id: int
     work_date: date
-    service_id: int
-    service_quantity: Decimal = Field(gt=0)
+    services: List[WorkServiceCreate]
     description: str = Field(min_length=5)
     materials: List[WorkMaterialCreate] = []
     request_id: Optional[int] = None
@@ -166,23 +182,22 @@ class WorkCreate(BaseModel):
             raise ValueError('Дата работы не может быть в будущем')
         return v
 
+    @validator('services')
+    def services_not_empty(cls, v):
+        if not v:
+            raise ValueError('Добавьте хотя бы одну услугу')
+        return v
+
 
 class WorkUpdatePrices(BaseModel):
     service_unit_price: Optional[Decimal] = None
+    services: List[dict] = []
     materials: List[dict] = []
 
 
 class WorkUpdate(BaseModel):
     description: Optional[str] = None
-    service_quantity: Optional[Decimal] = Field(None, gt=0)
     work_date: Optional[date] = None
-
-    @field_validator('service_quantity', mode='before')
-    @classmethod
-    def empty_str_to_none(cls, v):
-        if v == '' or v is None:
-            return None
-        return v
 
     @field_validator('work_date', mode='before')
     @classmethod
@@ -203,8 +218,8 @@ class WorkUpdate(BaseModel):
 
 class WorkUpdateAdmin(WorkUpdate):
     building_id: Optional[int] = None
-    service_id: Optional[int] = None
     user_id: Optional[int] = None
+    services: Optional[List[WorkServiceCreate]] = None
     materials: Optional[List[WorkMaterialCreate]] = None
     request_id: Optional[int] = None
 
@@ -213,10 +228,7 @@ class WorkResponse(BaseModel):
     id: int
     building: BuildingResponse
     work_date: date
-    service: ServiceResponse
-    service_quantity: Decimal
-    service_unit_price: Optional[Decimal]
-    service_total_price: Optional[Decimal]
+    services: List[WorkServiceResponse]
     description: str
     materials: List[WorkMaterialResponse]
     materials_total_price: Optional[Decimal]
@@ -235,10 +247,7 @@ class WorkListItem(BaseModel):
     id: int
     building: BuildingResponse
     work_date: date
-    service: ServiceResponse
-    service_quantity: Decimal
-    service_unit_price: Optional[Decimal]
-    service_total_price: Optional[Decimal]
+    services: List[WorkServiceResponse]
     description: str
     materials_total_price: Optional[Decimal]
     total_price: Optional[Decimal]
