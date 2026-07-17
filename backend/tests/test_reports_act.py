@@ -10,6 +10,7 @@ from app.routers.reports import generate_act_docx
 class FakeUser:
     full_name = "Иванов И.И."
     username = "ivanov"
+    role = "comendant"
 
 
 class FakeBuilding:
@@ -22,6 +23,11 @@ class FakeService:
     unit = "м2"
 
 
+class FakeRequest:
+    id = 42
+    creator = FakeUser()
+
+
 class FakeWork:
     work_date = date(2026, 6, 15)
     building = FakeBuilding()
@@ -31,6 +37,7 @@ class FakeWork:
     service_total_price = Decimal("12600.00")
     total_price = Decimal("12600.00")
     request_id = 42
+    request = FakeRequest()
     work_materials = []
 
 
@@ -54,9 +61,17 @@ def test_act_table_has_request_id_column():
     assert row_values[1] == "42", f"Номер заявки не выведен: {row_values}"
 
 
+def test_act_includes_comendant_name():
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    found = any("Комендант:" in p.text and "Иванов И.И." in p.text for p in doc.paragraphs)
+    assert found, "ФИО коменданта не найдено в акте"
+
+
 def test_act_table_request_id_is_blank_for_unlinked_work():
     class UnlinkedFakeWork(FakeWork):
         request_id = None
+        request = None
 
     output = generate_act_docx([UnlinkedFakeWork()])
     doc = Document(output)

@@ -175,7 +175,7 @@ export default function RequestDetailPage() {
   const isExecutor = user.role === 'contractor' || user.role === 'director' || user.role === 'admin';
   const isDirector = user.role === 'director' || user.role === 'admin';
   const isAdmin = user.role === 'admin';
-  const isWatchman = user.role === 'watchman';
+  const isComendant = user.role === 'comendant';
 
   const canTake = isExecutor && req?.status === 'new';
   const canAssign = isDirector && req?.status !== 'completed';
@@ -185,7 +185,7 @@ export default function RequestDetailPage() {
   const canExtend = isAdmin && req?.status !== 'completed';
   const canEdit = isDirector && req?.status !== 'completed';
 
-  const backPath = isWatchman ? '/my-requests' : '/requests';
+  const backPath = isComendant ? '/my-requests' : '/requests';
 
   return (
     <div style={styles.container}>

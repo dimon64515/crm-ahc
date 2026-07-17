@@ -33,5 +33,5 @@ def require_role(*roles: str):
 require_admin = require_role("admin")
 require_director = require_role("director", "admin")
 require_contractor = require_role("contractor", "director", "admin")
-require_watchman = require_role("watchman")
+require_comendant = require_role("comendant")
 require_executor = require_role("contractor", "director", "admin")

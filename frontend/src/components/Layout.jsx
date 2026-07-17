@@ -80,7 +80,7 @@ export default function Layout({ children }) {
     navItems.push({ to: '/my-works', label: 'Мои записи' });
     navItems.push({ to: '/requests', label: 'Заявки' });
   }
-  if (user.role === 'watchman') {
+  if (user.role === 'comendant') {
     navItems.push({ to: '/requests/new', label: 'Новая заявка' });
     navItems.push({ to: '/my-requests', label: 'Мои заявки' });
   }
@@ -127,7 +127,7 @@ export default function Layout({ children }) {
 }
 
 function roleLabel(role) {
-  const map = { contractor: 'Подрядчик', watchman: 'Вахтёр', director: 'Директор', admin: 'Админ' };
+  const map = { contractor: 'Подрядчик', comendant: 'Комендант', director: 'Директор', admin: 'Админ' };
   return map[role] || role;
 }
 

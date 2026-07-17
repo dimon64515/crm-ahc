@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db, SessionLocal
 from app.models import Request, RequestPhoto, Building, User, Service, Work
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate
-from app.core.dependencies import get_current_user, require_watchman, require_executor, require_director, require_admin
+from app.core.dependencies import get_current_user, require_comendant, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
 from app.services.push_service import send_push_to_roles
@@ -107,7 +107,7 @@ def create_request(
     data: RequestCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_watchman)
+    current_user: User = Depends(require_comendant)
 ):
     building = db.query(Building).filter(Building.id == data.building_id, Building.is_active == True).first()
     if not building:
@@ -180,7 +180,7 @@ def list_requests(
 @router.get("/my", response_model=RequestListResponse)
 def list_my_requests(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_watchman)
+    current_user: User = Depends(require_comendant)
 ):
     items = db.query(Request).options(
         joinedload(Request.building),
@@ -209,7 +209,7 @@ def get_request(
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    if current_user.role == "watchman" and req.created_by != current_user.id:
+    if current_user.role == "comendant" and req.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
 
     return build_request_response(req)
@@ -253,7 +253,7 @@ def upload_request_photos(
     request_id: int,
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_watchman)
+    current_user: User = Depends(require_comendant)
 ):
     req = db.query(Request).filter(Request.id == request_id).first()
     if not req:

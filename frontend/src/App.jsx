@@ -20,7 +20,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Загрузка...</div>;
   if (!user) return <Navigate to="/login" />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    if (user.role === 'watchman') return <Navigate to="/requests/new" />;
+    if (user.role === 'comendant') return <Navigate to="/requests/new" />;
     return user.role === 'contractor' ? <Navigate to="/works/new" /> : <Navigate to="/dashboard" />;
   }
   return children;
@@ -93,7 +93,7 @@ function AppRoutes() {
       <Route
         path="/requests/new"
         element={
-          <ProtectedRoute allowedRoles={['watchman']}>
+          <ProtectedRoute allowedRoles={['comendant']}>
             <Layout>
               <RequestNewPage />
             </Layout>
@@ -113,7 +113,7 @@ function AppRoutes() {
       <Route
         path="/requests/:id"
         element={
-          <ProtectedRoute allowedRoles={['watchman', 'contractor', 'director', 'admin']}>
+          <ProtectedRoute allowedRoles={['comendant', 'contractor', 'director', 'admin']}>
             <Layout>
               <RequestDetailPage />
             </Layout>
@@ -123,7 +123,7 @@ function AppRoutes() {
       <Route
         path="/my-requests"
         element={
-          <ProtectedRoute allowedRoles={['watchman']}>
+          <ProtectedRoute allowedRoles={['comendant']}>
             <Layout>
               <MyRequestsPage />
             </Layout>

@@ -14,10 +14,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.utils import get_column_letter
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Work, Building, Service, User, WorkMaterial
+from app.models import Work, Building, Service, User, WorkMaterial, Request
 from app.schemas import SummaryReportItem
 from app.core.dependencies import get_current_user, require_director
 from app.core.config import get_settings
@@ -410,6 +410,14 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     p = add_text("(надлежащим образом/ с замечанием)")
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
+    # Комендант(ы) из заявок
+    comendants = set()
+    for work in works:
+        if work.request and work.request.creator and work.request.creator.role == "comendant":
+            comendants.add(work.request.creator.full_name or work.request.creator.username)
+    comendant_name = ", ".join(sorted(comendants)) if comendants else "_________________________________________________________________________"
+    add_text(f"Комендант: {comendant_name}")
+
     # Таблица материалов
     add_text("6. Используемые материалы для оказания услуг:", bold=True)
     table = doc.add_table(rows=1, cols=7)
@@ -555,7 +563,9 @@ def export_act(
     current_user = Depends(require_director)
 ):
     """Формирует Word-документ (акт сдачи-приемки) по отфильтрованным работам."""
-    query = db.query(Work)
+    query = db.query(Work).options(
+        joinedload(Work.request).joinedload(Request.creator),
+    )
 
     if date_from:
         query = query.filter(Work.work_date >= date_from)

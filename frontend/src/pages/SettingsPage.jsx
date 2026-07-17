@@ -78,7 +78,7 @@ function UsersTab() {
         <input placeholder="Телефон" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} style={styles.input} />
         <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={styles.input}>
           <option value="contractor">Подрядчик</option>
-          <option value="watchman">Вахтёр</option>
+          <option value="comendant">Комендант</option>
           <option value="director">Директор</option>
           <option value="admin">Админ</option>
         </select>
@@ -438,11 +438,11 @@ function BackupsTab() {
   );
 }
 
-const roleLabel = (r) => ({ contractor: 'Подрядчик', watchman: 'Вахтёр', director: 'Директор', admin: 'Админ' }[r] || r);
+const roleLabel = (r) => ({ contractor: 'Подрядчик', comendant: 'Комендант', director: 'Директор', admin: 'Админ' }[r] || r);
 const roleBadge = (r) => ({
   display: 'inline-block', padding: '3px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600,
-  background: r === 'admin' ? '#fef3c7' : r === 'director' ? '#dbeafe' : r === 'watchman' ? '#f3e8ff' : '#d1fae5',
-  color: r === 'admin' ? '#92400e' : r === 'director' ? '#1e40af' : r === 'watchman' ? '#7e22ce' : '#065f46',
+  background: r === 'admin' ? '#fef3c7' : r === 'director' ? '#dbeafe' : r === 'comendant' ? '#f3e8ff' : '#d1fae5',
+  color: r === 'admin' ? '#92400e' : r === 'director' ? '#1e40af' : r === 'comendant' ? '#7e22ce' : '#065f46',
 });
 const statusBadge = (active) => ({
   display: 'inline-block', padding: '3px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600,
