@@ -95,6 +95,7 @@ def fill_request_template(request: Request) -> io.BytesIO:
     creator_name = request.creator.full_name or request.creator.username if request.creator else ""
     executor_name = request.executor.full_name or request.executor.username if request.executor else ""
     description = request.description or ""
+    service_name = request.service.name if request.service else ""
     created_date = _format_date(request.created_at)
 
     # Номер заявки: "Поступила ЗАЯВКА    №"
@@ -110,11 +111,11 @@ def fill_request_template(request: Request) -> io.BytesIO:
     # Причина отказа оставляем пустой
     _replace_first_in_doc(doc, "Причина отказа:", "Причина отказа: —")
 
-    # Необходимый ремонт — описание заявки
+    # Необходимый ремонт — услуга, выбранная в заявке
     _replace_first_in_doc(
         doc,
         "Необходим ремонт: _____________________________________________________",
-        f"Необходим ремонт: {description}",
+        f"Необходим ремонт: {service_name}",
     )
 
     # Подпись заявителя (коменданта) в блоке "Поданная мною заявка исполнена"
