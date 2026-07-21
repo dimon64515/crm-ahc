@@ -465,7 +465,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     materials_total = Decimal("0")
     row_num = 1
     for work in works:
-        address = f"{work.building.number} {work.building.name or ''}".strip()
+        address = (work.building.name or str(work.building.number)).strip()
         work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
         request_str = _format_request_label(work)
         for wm in work.work_materials or []:
@@ -532,7 +532,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     service_total = Decimal("0")
     row_num = 1
     for work in works:
-        address = f"{work.building.number} {work.building.name or ''}".strip()
+        address = (work.building.name or str(work.building.number)).strip()
         work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
         request_str = _format_request_label(work)
         for ws in work.work_services:
