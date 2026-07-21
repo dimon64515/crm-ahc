@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import Select from 'react-select';
 import { requestsAPI, usersAPI, buildingsAPI, servicesAPI, getUploadUrl } from '../api';
 
 const STATUS_LABELS = {
@@ -17,6 +18,26 @@ const STATUS_STYLES = {
 
 const statusLabel = (status) => STATUS_LABELS[status] || status;
 const statusStyle = (status) => STATUS_STYLES[status] || { background: '#f3f4f6', color: '#374151' };
+
+const selectStyles = {
+  container: (base) => ({ ...base, flex: 1, minWidth: '180px', maxWidth: '100%' }),
+  control: (base, state) => ({
+    ...base,
+    borderColor: state.isFocused ? '#2563eb' : '#d1d5db',
+    boxShadow: state.isFocused ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
+    borderRadius: '8px',
+    minHeight: '38px',
+    fontSize: '14px',
+  }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isSelected ? '#2563eb' : state.isFocused ? '#eff6ff' : '#fff',
+    color: state.isSelected ? '#fff' : '#374151',
+    fontSize: '14px',
+    padding: '10px 12px',
+  }),
+  placeholder: (base) => ({ ...base, color: '#9ca3af' }),
+};
 
 export default function RequestDetailPage() {
   const { id } = useParams();
@@ -248,16 +269,15 @@ export default function RequestDetailPage() {
             <div style={styles.row}>
               <span style={styles.label}>Услуга</span>
               {editMode ? (
-                <select
-                  value={editedServiceId}
-                  onChange={(e) => setEditedServiceId(e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="">Выберите услугу</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <Select
+                  options={services.map((s) => ({ value: s.id, label: s.name }))}
+                  value={services.map((s) => ({ value: s.id, label: s.name })).find((o) => o.value === (editedServiceId ? parseInt(editedServiceId, 10) : '')) || null}
+                  onChange={(opt) => setEditedServiceId(opt ? String(opt.value) : '')}
+                  placeholder="Выберите услугу"
+                  isSearchable
+                  isClearable
+                  styles={selectStyles}
+                />
               ) : (
                 <span style={styles.value}>{req.service?.name || 'Не назначена'}</span>
               )}
@@ -327,17 +347,16 @@ export default function RequestDetailPage() {
                         <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
                       ))}
                     </select>
-                    <select
-                      value={selectedServiceId}
-                      onChange={(e) => setSelectedServiceId(e.target.value)}
-                      disabled={actionLoading}
-                      style={{ ...styles.select, minWidth: '160px' }}
-                    >
-                      <option value="">Выберите услугу</option>
-                      {services.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                    <Select
+                      options={services.map((s) => ({ value: s.id, label: s.name }))}
+                      value={services.map((s) => ({ value: s.id, label: s.name })).find((o) => o.value === (selectedServiceId ? parseInt(selectedServiceId, 10) : '')) || null}
+                      onChange={(opt) => setSelectedServiceId(opt ? String(opt.value) : '')}
+                      placeholder="Выберите услугу"
+                      isDisabled={actionLoading}
+                      isSearchable
+                      isClearable
+                      styles={selectStyles}
+                    />
                     <button
                       onClick={handleAssign}
                       disabled={actionLoading || !selectedUserId}
