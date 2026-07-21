@@ -377,7 +377,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     # Заголовок
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run("Форма акта сдачи-приемки оказанных услуг")
+    run = p.add_run("Акт сдачи-приемки оказанных услуг")
     run.bold = True
     run.font.size = Pt(14)
     run.font.name = "Times New Roman"
@@ -442,14 +442,14 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
 
     # Таблица материалов
     add_text("6. Используемые материалы для оказания услуг:", bold=True)
-    table = doc.add_table(rows=1, cols=7)
+    table = doc.add_table(rows=1, cols=9)
     table.style = "Table Grid"
     table.autofit = False
     table.allow_autofit = False
 
     hdr = table.rows[0].cells
-    headers = ["№", "Адрес объекта", "Наименование материалов", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость материалов руб."]
-    widths = [Cm(1.0), Cm(3.0), Cm(4.5), Cm(1.5), Cm(2.0), Cm(2.5), Cm(3.0)]
+    headers = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование материалов", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость материалов руб."]
+    widths = [Cm(1.0), Cm(1.5), Cm(2.2), Cm(2.8), Cm(3.8), Cm(1.5), Cm(2.0), Cm(2.5), Cm(3.0)]
     for i, (h, w) in enumerate(zip(headers, widths)):
         hdr[i].text = h
         hdr[i].width = w
@@ -462,11 +462,14 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     materials_total = Decimal("0")
     row_num = 1
     for work in works:
+        address = f"{work.building.number} {work.building.name or ''}".strip()
+        work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
         for wm in work.work_materials or []:
             row = table.add_row().cells
-            address = f"{work.building.number} {work.building.name or ''}".strip()
             values = [
                 str(row_num),
+                str(work.request_id) if work.request_id else "",
+                work_date_str,
                 address,
                 wm.material.name,
                 str(wm.quantity),
@@ -488,15 +491,15 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
 
     # Итого по материалам
     total_row = table.add_row().cells
-    total_row[0].merge(total_row[5])
+    total_row[0].merge(total_row[7])
     total_row[0].text = "Итого:"
-    total_row[6].text = f"{float(materials_total):.2f}"
+    total_row[8].text = f"{float(materials_total):.2f}"
     for paragraph in total_row[0].paragraphs:
         for run in paragraph.runs:
             run.font.bold = True
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
-    for paragraph in total_row[6].paragraphs:
+    for paragraph in total_row[8].paragraphs:
         for run in paragraph.runs:
             run.font.bold = True
             run.font.name = "Times New Roman"

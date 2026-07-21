@@ -35,6 +35,18 @@ class FakeRequest:
     creator = FakeUser()
 
 
+class FakeMaterial:
+    name = "Тройник"
+    unit = "шт"
+
+
+class FakeWorkMaterial:
+    material = FakeMaterial()
+    quantity = Decimal("2")
+    unit_price = Decimal("50.00")
+    total_price = Decimal("100.00")
+
+
 class FakeWork:
     work_date = date(2026, 6, 15)
     building = FakeBuilding()
@@ -42,7 +54,7 @@ class FakeWork:
     total_price = Decimal("12600.00")
     request_id = 42
     request = FakeRequest()
-    work_materials = []
+    work_materials = [FakeWorkMaterial()]
 
 
 def test_act_table_has_work_date_column():
@@ -97,3 +109,24 @@ def test_act_header_date_is_russian():
             found = True
             break
     assert found, "Русская дата в шапке акта не найдена"
+
+
+def test_act_title_has_no_word_form():
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    first_paragraph = doc.paragraphs[0].text
+    assert first_paragraph == "Акт сдачи-приемки оказанных услуг"
+    assert "Форма" not in first_paragraph
+
+
+def test_act_materials_table_has_request_and_date_columns():
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    tables = [t for t in doc.tables if any(cell.text == "Наименование материалов" for cell in t.rows[0].cells)]
+    assert tables, "Таблица материалов не найдена"
+    header = [cell.text for cell in tables[0].rows[0].cells]
+    assert "№ заявки" in header, f"Столбец '№ заявки' отсутствует в материалах: {header}"
+    assert "Дата работ" in header, f"Столбец 'Дата работ' отсутствует в материалах: {header}"
+    row_values = [cell.text for cell in tables[0].rows[1].cells]
+    assert row_values[1] == "42", f"Номер заявки в материалах не выведен: {row_values}"
+    assert row_values[2] == "15.06.2026", f"Дата работ в материалах не выведена: {row_values}"
