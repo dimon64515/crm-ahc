@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Select from 'react-select';
 import { usersAPI, buildingsAPI, servicesAPI, materialsAPI, backupsAPI } from '../api';
 
 const tabs = [
@@ -341,12 +342,20 @@ function MaterialsTab() {
 
 function BackupsTab() {
   const [backups, setBackups] = useState([]);
-  const [filter, setFilter] = useState({ type: 'full' });
+  const [filter, setFilter] = useState({ type: 'full', date_from: '', date_to: '', buildings: [], contractors: [] });
   const [creating, setCreating] = useState(false);
+  const [buildings, setBuildings] = useState([]);
+  const [contractors, setContractors] = useState([]);
+  const [restoreFile, setRestoreFile] = useState(null);
+  const [restoreName, setRestoreName] = useState('');
+  const [validateLoading, setValidateLoading] = useState(false);
+  const [validateResult, setValidateResult] = useState(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadBuildings(); loadContractors(); }, []);
 
   const load = async () => { try { const res = await backupsAPI.list(); setBackups(res.data.items || []); } catch (e) {} };
+  const loadBuildings = async () => { try { const res = await buildingsAPI.list({ is_active: true }); setBuildings((res.data || []).map(b => ({ value: b.id, label: `${b.number} — ${b.name}` }))); } catch (e) {} };
+  const loadContractors = async () => { try { const res = await usersAPI.list({ role: 'contractor', per_page: 1000 }); setContractors((res.data.items || []).map(u => ({ value: u.id, label: u.full_name || u.username }))); } catch (e) {} };
 
   const handleCreate = async () => {
     setCreating(true);
@@ -359,14 +368,14 @@ function BackupsTab() {
     finally { setCreating(false); }
   };
 
-  const handleDownload = async (backupId) => {
+  const handleDownload = async (backupId, part = 1) => {
     try {
-      const res = await backupsAPI.download(backupId);
+      const res = await backupsAPI.download(backupId, part);
       const blob = new Blob([res.data], { type: 'application/zip' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${backupId}.zip`;
+      a.download = `${backupId}.part${part}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -381,15 +390,60 @@ function BackupsTab() {
     try { await backupsAPI.remove(backupId); load(); } catch (e) {}
   };
 
+  const handleUpload = async (file) => {
+    if (!file) return;
+    try {
+      setRestoreFile(file);
+      setRestoreName(file.name.replace(/\.zip$/i, ''));
+      await backupsAPI.upload(file);
+      setValidateResult(null);
+    } catch (e) {
+      alert('Ошибка загрузки файла');
+      setRestoreFile(null);
+    }
+  };
+
+  const handleValidate = async () => {
+    if (!restoreName) return;
+    setValidateLoading(true);
+    try {
+      const res = await backupsAPI.validate(restoreName);
+      setValidateResult(res.data);
+    } catch (e) {
+      setValidateResult({ valid: false, message: e.response?.data?.detail || 'Ошибка проверки' });
+    } finally {
+      setValidateLoading(false);
+    }
+  };
+
   const formatDate = (d) => { if (!d) return '—'; return new Date(d).toLocaleString('ru-RU'); };
   const formatSize = (bytes) => { if (!bytes) return '—'; const i = Math.floor(Math.log(bytes) / Math.log(1024)); return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${['Б','КБ','МБ','ГБ'][i]}`; };
+
+  const selectStyles = {
+    container: (base) => ({ ...base, minWidth: '200px', flex: 1 }),
+    control: (base, state) => ({
+      ...base,
+      borderColor: state.isFocused ? '#2563eb' : '#d1d5db',
+      boxShadow: state.isFocused ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
+      borderRadius: '8px',
+      minHeight: '38px',
+      fontSize: '14px',
+    }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isSelected ? '#2563eb' : state.isFocused ? '#eff6ff' : '#fff',
+      color: state.isSelected ? '#fff' : '#374151',
+      fontSize: '14px',
+      padding: '8px 12px',
+    }),
+  };
 
   return (
     <div>
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Создать резервную копию</h3>
-        <div style={styles.row}>
-          <select value={filter.type} onChange={e => setFilter({ type: e.target.value })} style={styles.input}>
+        <div style={{ ...styles.row, alignItems: 'flex-end' }}>
+          <select value={filter.type} onChange={e => setFilter({ ...filter, type: e.target.value })} style={styles.input}>
             <option value="full">Полная копия (БД + файлы)</option>
             <option value="photos">Только фото</option>
           </select>
@@ -397,6 +451,72 @@ function BackupsTab() {
             {creating ? 'Создание…' : 'Создать'}
           </button>
         </div>
+        {filter.type === 'photos' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <input type="date" placeholder="С" value={filter.date_from} onChange={e => setFilter({ ...filter, date_from: e.target.value })} style={styles.input} />
+              <input type="date" placeholder="По" value={filter.date_to} onChange={e => setFilter({ ...filter, date_to: e.target.value })} style={styles.input} />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <Select
+                isMulti
+                options={buildings}
+                value={filter.buildings}
+                onChange={(val) => setFilter({ ...filter, buildings: val || [] })}
+                placeholder="Корпуса"
+                styles={selectStyles}
+              />
+              <Select
+                isMulti
+                options={contractors}
+                value={filter.contractors}
+                onChange={(val) => setFilter({ ...filter, contractors: val || [] })}
+                placeholder="Подрядчики"
+                styles={selectStyles}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Восстановление из бэкапа</h3>
+        <div
+          style={styles.dropZone}
+          onDragOver={(e) => { e.preventDefault(); }}
+          onDrop={(e) => { e.preventDefault(); handleUpload(e.dataTransfer.files[0]); }}
+          onClick={() => document.getElementById('restore-upload')?.click()}
+        >
+          <input id="restore-upload" type="file" accept=".zip" style={{ display: 'none' }} onChange={e => handleUpload(e.target.files[0])} />
+          <div style={{ fontSize: '24px', marginBottom: '6px' }}>📤</div>
+          <div style={{ fontSize: '14px', color: '#374151' }}>
+            {restoreFile ? restoreFile.name : 'Перетащите ZIP-часть бэкапа или нажмите для выбора'}
+          </div>
+        </div>
+        {restoreFile && (
+          <div style={{ marginTop: '12px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              placeholder="ID бэкапа (имя файла без .zip)"
+              value={restoreName}
+              onChange={e => setRestoreName(e.target.value)}
+              style={styles.input}
+            />
+            <button onClick={handleValidate} disabled={validateLoading || !restoreName} style={styles.warningBtn}>
+              {validateLoading ? 'Проверка…' : 'Проверить бэкап'}
+            </button>
+          </div>
+        )}
+        {validateResult && (
+          <div style={{ marginTop: '12px', padding: '12px 16px', borderRadius: '8px', background: validateResult.valid ? '#f0fdf4' : '#fef2f2', color: validateResult.valid ? '#059669' : '#b91c1c' }}>
+            <div style={{ fontWeight: 600, marginBottom: '6px' }}>{validateResult.valid ? 'Бэкап корректен' : 'Ошибка проверки'}</div>
+            <div>{validateResult.message}</div>
+            {validateResult.valid && (
+              <div style={{ marginTop: '8px', fontSize: '13px', color: '#374151', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
+                <code>cd /home/dimon64515/projects/crm/backend && source venv/bin/activate && python scripts/restore_backup.py --backup-id {validateResult.backup_id} --yes</code>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <h3 style={styles.sectionTitle}>История</h3>
@@ -412,6 +532,7 @@ function BackupsTab() {
               <th>Тип</th>
               <th>Создана</th>
               <th style={{ textAlign: 'right' }}>Размер</th>
+              <th>Частей</th>
               <th>Статус</th>
               <th style={{ textAlign: 'right' }}>Действия</th>
             </tr>
@@ -424,9 +545,18 @@ function BackupsTab() {
                 </td>
                 <td className="tabular-nums">{formatDate(b.created_at)}</td>
                 <td style={{ textAlign: 'right' }} className="tabular-nums">{formatSize((b.size_mb || 0) * 1024 * 1024)}</td>
+                <td style={{ textAlign: 'center' }}>{b.parts_count || 1}</td>
                 <td><span style={statusBadge(b.status === 'completed')}>{b.status === 'completed' ? 'Готова' : b.status}</span></td>
                 <td style={{ textAlign: 'right' }}>
-                  <button onClick={() => handleDownload(b.backup_id)} style={styles.smallLink}>Скачать</button>
+                  {(b.parts_count || 1) > 1 ? (
+                    <span>
+                      {Array.from({ length: b.parts_count || 1 }, (_, i) => (
+                        <button key={i} onClick={() => handleDownload(b.backup_id, i + 1)} style={styles.smallLink}>part{i + 1}</button>
+                      ))}
+                    </span>
+                  ) : (
+                    <button onClick={() => handleDownload(b.backup_id)} style={styles.smallLink}>Скачать</button>
+                  )}
                   <button onClick={() => handleDelete(b.backup_id)} style={styles.smallDanger}>Удалить</button>
                 </td>
               </tr>
@@ -480,4 +610,5 @@ const styles = {
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
   empty: { textAlign: 'center', padding: '48px 16px' },
   row: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' },
+  dropZone: { border: '2px dashed #d1d5db', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', background: '#f9fafb', transition: 'border-color 0.15s', marginTop: '8px' },
 };

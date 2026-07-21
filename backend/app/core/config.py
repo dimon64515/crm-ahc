@@ -15,7 +15,12 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10 MB
     MAX_PHOTO_SIZE: int = 1 * 1024 * 1024  # 1 MB after compression
     MAX_PHOTOS_PER_WORK: int = 20
-    
+
+    BACKUP_VERSION: str = "1.0"
+    BACKUP_MAX_PART_SIZE_MB: int = 300
+    BACKUP_RETENTION_FULL: int = 10
+    BACKUP_RETENTION_PHOTOS: int = 20
+
     ALLOWED_ORIGINS: str = "https://report.fanat-mv.ru,http://localhost:5173"
     
     VAPID_PRIVATE_KEY: str = ""

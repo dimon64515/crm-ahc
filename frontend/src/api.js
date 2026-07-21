@@ -126,10 +126,24 @@ export const reportsAPI = {
 export const backupsAPI = {
   list: () => api.get('/backups'),
   createFull: () => api.post('/backups/full'),
-  createPhotos: (params) => api.post('/backups/photos', null, { params }),
-  download: (id) => api.get(`/backups/download/${id}`, { responseType: 'blob' }),
+  createPhotos: ({ date_from, date_to, buildings, contractors }) => api.post('/backups/photos', null, {
+    params: {
+      date_from,
+      date_to,
+      building_ids: (buildings || []).map((b) => b.value).join(','),
+      user_ids: (contractors || []).map((u) => u.value).join(','),
+    },
+  }),
+  download: (id, part = 1) => api.get(`/backups/download/${id}?part=${part}`, { responseType: 'blob' }),
   remove: (id) => api.delete(`/backups/${id}`),
   delete: (id) => api.delete(`/backups/${id}`),
+  upload: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/backups/upload', formData, { headers: { 'Content-Type': undefined } });
+  },
+  validate: (id) => api.post(`/backups/validate/${id}`),
+  restoreInfo: (id) => api.post('/backups/restore', null, { params: { backup_id: id } }),
 };
 
 export const requestsAPI = {
