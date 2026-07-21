@@ -123,13 +123,12 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
-.layout-logo {
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: -0.025em;
+.layout-logo-icon {
+  height: 32px;
+  width: 32px;
   margin-right: 16px;
-  color: #fff;
-  white-space: nowrap;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .layout-link {

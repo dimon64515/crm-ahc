@@ -97,7 +97,7 @@ export default function Layout({ children, fullWidth = false }) {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <nav className="layout-nav" role="navigation" aria-label="Главное меню">
         <div className="layout-nav-left">
-          <span className="layout-logo">CRM АХЧ</span>
+          <img src="/icon-192x192.png" alt="CRM АХЧ" className="layout-logo-icon" />
           {navItems.map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(item.to + '/');
             return (

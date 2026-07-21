@@ -33,7 +33,7 @@ export default function LoginPage() {
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={styles.brand}>
-          <div style={styles.brandIcon}>🏗️</div>
+          <img src="/icon-192x192.png" alt="CRM АХЧ" style={styles.logo} />
           <h1 style={styles.title}>CRM АХЧ</h1>
           <p style={styles.subtitle}>Вход в систему</p>
         </div>
@@ -111,7 +111,7 @@ const styles = {
     border: '1px solid #e5e7eb',
   },
   brand: { textAlign: 'center', marginBottom: '28px' },
-  brandIcon: { fontSize: '40px', marginBottom: '12px' },
+  logo: { width: '80px', height: '80px', marginBottom: '12px' },
   title: {
     fontSize: '24px',
     fontWeight: 700,
