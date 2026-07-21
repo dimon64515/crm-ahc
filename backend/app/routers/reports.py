@@ -442,14 +442,6 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     p = add_text("(надлежащим образом/ с замечанием)")
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    # Комендант(ы) из заявок
-    comendants = set()
-    for work in works:
-        if work.request and work.request.creator and work.request.creator.role == "comendant":
-            comendants.add(work.request.creator.full_name or work.request.creator.username)
-    comendant_name = ", ".join(sorted(comendants)) if comendants else "_________________________________________________________________________"
-    add_text(f"Комендант: {comendant_name}")
-
     # Таблица материалов
     add_text("6. Используемые материалы для оказания услуг:", bold=True)
     table = doc.add_table(rows=1, cols=9)
@@ -459,7 +451,8 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
 
     hdr = table.rows[0].cells
     headers = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование материалов", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость материалов руб."]
-    widths = [Cm(1.0), Cm(1.5), Cm(2.2), Cm(2.8), Cm(3.8), Cm(1.5), Cm(2.0), Cm(2.5), Cm(3.0)]
+    # Сумма ширин = 17.5 см (ширина листа 21 см минус поля 2.0 + 1.5 см)
+    widths = [Cm(0.8), Cm(1.8), Cm(1.8), Cm(2.5), Cm(4.4), Cm(1.2), Cm(1.5), Cm(1.7), Cm(1.8)]
     for i, (h, w) in enumerate(zip(headers, widths)):
         hdr[i].text = h
         hdr[i].width = w
@@ -525,7 +518,8 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
 
     hdr2 = table2.rows[0].cells
     headers2 = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование работ", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость работ (услуг) руб."]
-    widths2 = [Cm(1.0), Cm(1.5), Cm(2.2), Cm(2.8), Cm(3.8), Cm(1.5), Cm(2.0), Cm(2.5), Cm(3.0)]
+    # Сумма ширин = 17.5 см (ширина листа 21 см минус поля 2.0 + 1.5 см)
+    widths2 = [Cm(0.8), Cm(1.8), Cm(1.8), Cm(2.5), Cm(4.4), Cm(1.2), Cm(1.5), Cm(1.7), Cm(1.8)]
     for i, (h, w) in enumerate(zip(headers2, widths2)):
         hdr2[i].text = h
         hdr2[i].width = w

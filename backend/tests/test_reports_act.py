@@ -78,11 +78,11 @@ def test_act_table_has_request_id_column():
     assert row_values[1] == "42 от 21.07.26", f"Номер заявки с датой не выведен: {row_values}"
 
 
-def test_act_includes_comendant_name():
+def test_act_has_no_comendant_line():
     output = generate_act_docx([FakeWork()])
     doc = Document(output)
-    found = any("Комендант:" in p.text and "Иванов И.И." in p.text for p in doc.paragraphs)
-    assert found, "ФИО коменданта не найдено в акте"
+    found = any("Комендант:" in p.text for p in doc.paragraphs)
+    assert not found, "Строка 'Комендант:' должна быть убрана из акта"
 
 
 def test_act_table_request_id_is_blank_for_unlinked_work():
