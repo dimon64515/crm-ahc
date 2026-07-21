@@ -104,7 +104,7 @@ function AppRoutes() {
         path="/requests"
         element={
           <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
-            <Layout>
+            <Layout fullWidth>
               <RequestsListPage />
             </Layout>
           </ProtectedRoute>

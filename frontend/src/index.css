@@ -205,6 +205,10 @@ tbody tr:hover {
   width: 100%;
 }
 
+.layout-main-full-width {
+  max-width: none;
+}
+
 /* Mobile nav */
 @media (max-width: 640px) {
   .layout-nav {

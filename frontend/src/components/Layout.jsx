@@ -68,7 +68,7 @@ function PushToggle() {
   );
 }
 
-export default function Layout({ children }) {
+export default function Layout({ children, fullWidth = false }) {
   const { user, logout } = useAuth();
   const location = useLocation();
 
@@ -121,7 +121,7 @@ export default function Layout({ children }) {
           <button onClick={logout} className="layout-logout">Выход</button>
         </div>
       </nav>
-      <main className="layout-main">{children}</main>
+      <main className={`layout-main ${fullWidth ? 'layout-main-full-width' : ''}`}>{children}</main>
     </div>
   );
 }
