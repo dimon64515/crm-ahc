@@ -1,5 +1,5 @@
 import zipfile
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from decimal import Decimal
 from io import BytesIO
 from unittest.mock import ANY, patch
@@ -646,4 +646,58 @@ def test_complete_request_creates_work():
     assert work.work_services[0].unit_price == service.price
     assert work.total_price == service.price
     assert work.description == req.description
+    db.close()
+
+def test_list_requests_default_sorting():
+    db = TestingSessionLocal()
+    director = User(
+        username="director_sort_default",
+        hashed_password=get_password_hash("pass"),
+        role="director",
+        is_active=True,
+    )
+    building = Building(number="70", name="Корпус 70", is_active=True)
+    db.add_all([director, building])
+    db.commit()
+
+    now = datetime.utcnow()
+    # Распределённая заявка с более поздней датой создания
+    assigned = Request(
+        building_id=building.id,
+        description="assigned old",
+        status="in_progress",
+        created_by=director.id,
+        assigned_to=director.id,
+        due_date=date.today() + timedelta(days=5),
+        extended_count=0,
+        created_at=now + timedelta(hours=1),
+    )
+    # Нераспределённая заявка с более ранней датой создания
+    unassigned = Request(
+        building_id=building.id,
+        description="unassigned new",
+        status="new",
+        created_by=director.id,
+        due_date=date.today() + timedelta(days=5),
+        extended_count=0,
+        created_at=now - timedelta(hours=1),
+    )
+    db.add(assigned)
+    db.add(unassigned)
+    db.commit()
+    db.refresh(assigned)
+    db.refresh(unassigned)
+
+    login = client.post("/api/auth/login", json={"username": "director_sort_default", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    ids = [item["id"] for item in items]
+    # Нераспределённая заявка должна быть выше распределённой
+    assert ids.index(unassigned.id) < ids.index(assigned.id)
     db.close()

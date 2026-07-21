@@ -170,7 +170,7 @@ def list_requests(
             raise HTTPException(status_code=400, detail="Неверный формат date_to, ожидается YYYY-MM-DD")
         query = query.filter(Request.created_at <= datetime.combine(date_to_parsed, datetime.max.time()))
 
-    items = query.order_by(Request.created_at.desc()).all()
+    items = query.order_by(Request.assigned_to.asc().nullsfirst(), Request.created_at.desc()).all()
     return {
         "items": [build_request_list_item(r) for r in items],
         "total": len(items),
