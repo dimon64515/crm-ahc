@@ -62,7 +62,7 @@ export const usersAPI = {
 };
 
 export const servicesAPI = {
-  list: (search) => api.get('/services', { params: { search } }),
+  list: (params) => api.get('/services', { params }),
   create: (data) => api.post('/services', data),
   update: (id, data) => api.put(`/services/${id}`, data),
   remove: (id) => api.delete(`/services/${id}`),

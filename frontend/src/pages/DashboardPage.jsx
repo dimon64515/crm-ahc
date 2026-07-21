@@ -79,7 +79,7 @@ function DetailedReport() {
   useEffect(() => { loadBuildings(); loadServices(); loadContractors(); loadWorks(); }, []);
 
   const loadBuildings = async () => { try { const res = await buildingsAPI.list({ is_active: true }); setBuildings(res.data); } catch (e) {} };
-  const loadServices = async () => { try { const res = await servicesAPI.list(); setServices(res.data.items || []); } catch (e) {} };
+  const loadServices = async () => { try { const res = await servicesAPI.list({ per_page: 1000 }); setServices(res.data.items || []); } catch (e) {} };
   const loadContractors = async () => { try { const res = await usersAPI.list({ role: 'contractor' }); setContractors(res.data.items || []); } catch (e) {} };
 
   const loadWorks = async (params = {}) => {

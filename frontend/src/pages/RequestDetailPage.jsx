@@ -102,7 +102,7 @@ export default function RequestDetailPage() {
 
   const loadServices = useCallback(async () => {
     try {
-      const res = await servicesAPI.list();
+      const res = await servicesAPI.list({ per_page: 1000 });
       setServices((res.data.items || []).filter((s) => s.is_active));
     } catch (e) {
       setServices([]);

@@ -186,7 +186,7 @@ function ServicesTab() {
 
   useEffect(() => { load(); }, []);
 
-  const load = async () => { try { const res = await servicesAPI.list(); setItems(res.data.items || []); } catch (e) {} };
+  const load = async () => { try { const res = await servicesAPI.list({ per_page: 1000 }); setItems(res.data.items || []); } catch (e) {} };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
