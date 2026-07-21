@@ -179,10 +179,10 @@ export default function RequestsListPage() {
 
   const isOverdue = (req) => {
     if (!req.due_date || req.status === 'completed') return false;
+    const [y, m, d] = req.due_date.split('-').map(Number);
+    const due = new Date(y, m - 1, d);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const due = new Date(req.due_date);
-    due.setHours(0, 0, 0, 0);
     return due < today;
   };
 
@@ -193,8 +193,8 @@ export default function RequestsListPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const renderActions = (req) => (
-    <div style={styles.actionsGroup}>
+  const renderActions = (req, actionStyle = {}) => (
+    <div style={{ ...styles.actionsGroup, ...actionStyle }}>
       <Link to={`/requests/${req.id}`} style={styles.smallLink}>Открыть</Link>
       {canTake && req.status === 'new' && (
         <button
@@ -416,7 +416,7 @@ export default function RequestsListPage() {
                   <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {renderActions(req)}
+                    {renderActions(req, { justifyContent: 'flex-end' })}
                   </td>
                 </tr>
               ))}
