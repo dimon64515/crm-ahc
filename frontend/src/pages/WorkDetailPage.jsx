@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { worksAPI, buildingsAPI, servicesAPI, usersAPI, materialsAPI } from '../api';
+import { worksAPI, buildingsAPI, servicesAPI, usersAPI, materialsAPI, reportsAPI } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function WorkDetailPage() {
@@ -79,6 +79,21 @@ export default function WorkDetailPage() {
     }
     catch { alert('Ошибка удаления'); }
     finally { setDeleting(false); }
+  };
+
+  const handlePrint = async () => {
+    try {
+      const res = await reportsAPI.act({ work_id: id });
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `act_work_${id}.docx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Ошибка формирования печатной формы');
+    }
   };
 
   const handleDeletePhoto = async (photoId) => {
@@ -245,6 +260,11 @@ export default function WorkDetailPage() {
       <div style={styles.header}>
         <button onClick={() => navigate('/dashboard')} style={styles.backBtn}>← Назад</button>
         <div style={styles.headerActions}>
+          {(user.role === 'admin' || user.role === 'director') && (
+            <button onClick={handlePrint} style={styles.secondaryBtn}>
+              🖨️ Печатная форма
+            </button>
+          )}
           {canEdit && (
             <button onClick={() => { if (editMode) { setEditMode(false); loadWork(); } else { setEditMode(true); } }} style={styles.secondaryBtn}>
               {editMode ? 'Отмена' : '✏️ Редактировать'}

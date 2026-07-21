@@ -599,6 +599,7 @@ def export_act(
     building_id: str = None,
     service_id: str = None,
     user_id: str = None,
+    work_id: str = None,
     db: Session = Depends(get_db),
     current_user = Depends(require_director)
 ):
@@ -607,6 +608,8 @@ def export_act(
         joinedload(Work.request).joinedload(Request.creator),
     )
 
+    if work_id:
+        query = query.filter(Work.id == int(work_id))
     if date_from:
         query = query.filter(Work.work_date >= date_from)
     if date_to:
