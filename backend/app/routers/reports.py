@@ -361,6 +361,16 @@ def _format_period_date(d: date) -> str:
     return f"«{d.day:02d}» {months[d.month - 1]} {d.year} г."
 
 
+def _format_request_label(work: Work) -> str:
+    """Формирует подпись заявки вида '15 от 21.07.26'."""
+    if not work.request_id:
+        return ""
+    request_date = work.request.created_at.strftime("%d.%m.%y") if work.request and work.request.created_at else ""
+    if request_date:
+        return f"{work.request_id} от {request_date}"
+    return str(work.request_id)
+
+
 def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = None, contractor_name: str = "") -> BytesIO:
     """Генерирует Word-документ с актом сдачи-приемки по списку работ."""
     doc = Document()
@@ -464,11 +474,12 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     for work in works:
         address = f"{work.building.number} {work.building.name or ''}".strip()
         work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
+        request_str = _format_request_label(work)
         for wm in work.work_materials or []:
             row = table.add_row().cells
             values = [
                 str(row_num),
-                str(work.request_id) if work.request_id else "",
+                request_str,
                 work_date_str,
                 address,
                 wm.material.name,
@@ -529,11 +540,12 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     for work in works:
         address = f"{work.building.number} {work.building.name or ''}".strip()
         work_date_str = work.work_date.strftime("%d.%m.%Y") if work.work_date else ""
+        request_str = _format_request_label(work)
         for ws in work.work_services:
             row = table2.add_row().cells
             values = [
                 str(row_num),
-                str(work.request_id) if work.request_id else "",
+                request_str,
                 work_date_str,
                 address,
                 ws.service.name,

@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from docx import Document
@@ -33,6 +33,7 @@ class FakeWorkService:
 class FakeRequest:
     id = 42
     creator = FakeUser()
+    created_at = datetime(2026, 7, 21, 10, 30)
 
 
 class FakeMaterial:
@@ -74,7 +75,7 @@ def test_act_table_has_request_id_column():
     header = [cell.text for cell in tables[0].rows[0].cells]
     assert "№ заявки" in header, f"Столбец '№ заявки' отсутствует: {header}"
     row_values = [cell.text for cell in tables[0].rows[1].cells]
-    assert row_values[1] == "42", f"Номер заявки не выведен: {row_values}"
+    assert row_values[1] == "42 от 21.07.26", f"Номер заявки с датой не выведен: {row_values}"
 
 
 def test_act_includes_comendant_name():
@@ -128,5 +129,5 @@ def test_act_materials_table_has_request_and_date_columns():
     assert "№ заявки" in header, f"Столбец '№ заявки' отсутствует в материалах: {header}"
     assert "Дата работ" in header, f"Столбец 'Дата работ' отсутствует в материалах: {header}"
     row_values = [cell.text for cell in tables[0].rows[1].cells]
-    assert row_values[1] == "42", f"Номер заявки в материалах не выведен: {row_values}"
+    assert row_values[1] == "42 от 21.07.26", f"Номер заявки с датой в материалах не выведен: {row_values}"
     assert row_values[2] == "15.06.2026", f"Дата работ в материалах не выведена: {row_values}"
