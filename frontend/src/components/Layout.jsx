@@ -1,63 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { pushAPI, urlBase64ToUint8Array } from '../api';
+import { usePushSubscription } from '../hooks/usePushSubscription';
+import PushOfferModal from './PushOfferModal';
 
 function PushToggle() {
   const { user } = useAuth();
-  const [enabled, setEnabled] = useState(false);
-  const [supported, setSupported] = useState(false);
-
-  useEffect(() => {
-    const pushSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
-    setSupported(pushSupported);
-    if (!pushSupported) return;
-    navigator.serviceWorker.ready
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setEnabled(!!sub && Notification.permission === 'granted'))
-      .catch((err) => console.error('Ошибка при получении push-подписки:', err));
-  }, []);
+  const { supported, enabled, subscribe, unsubscribe } = usePushSubscription();
 
   if (!supported || !user) return null;
 
   const handleToggle = async () => {
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      if (!enabled) {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return;
-        const { data } = await pushAPI.getVapidPublicKey();
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(data.public_key),
-        });
-        const subJson = sub.toJSON();
-        try {
-          await pushAPI.subscribe({
-            endpoint: subJson.endpoint,
-            p256dh: subJson.keys.p256dh,
-            auth: subJson.keys.auth,
-          });
-        } catch (err) {
-          console.error('Ошибка при сохранении push-подписки на сервере:', err);
-          await sub.unsubscribe();
-        }
-      } else {
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
-          const subJson = sub.toJSON();
-          try {
-            await sub.unsubscribe();
-            await pushAPI.unsubscribe({ endpoint: subJson.endpoint });
-          } catch (err) {
-            console.error('Ошибка при удалении push-подписки:', err);
-          }
-        }
-      }
-      const currentSub = await reg.pushManager.getSubscription();
-      setEnabled(!!currentSub);
-    } catch (err) {
-      console.error('Ошибка при переключении push-уведомлений:', err);
+    if (enabled) {
+      await unsubscribe();
+    } else {
+      await subscribe();
     }
   };
 
@@ -71,6 +28,17 @@ function PushToggle() {
 export default function Layout({ children, fullWidth = false }) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const [showOffer, setShowOffer] = useState(false);
+
+  useEffect(() => {
+    const pushSupported =
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window;
+    if (pushSupported && Notification.permission === 'default') {
+      setShowOffer(true);
+    }
+  }, []);
 
   if (!user) return children;
 
@@ -122,6 +90,7 @@ export default function Layout({ children, fullWidth = false }) {
         </div>
       </nav>
       <main className={`layout-main ${fullWidth ? 'layout-main-full-width' : ''}`}>{children}</main>
+      {showOffer && <PushOfferModal onClose={() => setShowOffer(false)} />}
     </div>
   );
 }
