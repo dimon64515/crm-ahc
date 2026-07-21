@@ -76,7 +76,7 @@ export const servicesAPI = {
 };
 
 export const materialsAPI = {
-  list: (search) => api.get('/materials', { params: { search } }),
+  list: (params) => api.get('/materials', { params }),
   create: (data) => api.post('/materials', data),
   update: (id, data) => api.put(`/materials/${id}`, data),
   remove: (id) => api.delete(`/materials/${id}`),

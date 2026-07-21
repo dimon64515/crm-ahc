@@ -55,7 +55,7 @@ export default function WorkDetailPage() {
   const loadBuildings = useCallback(async () => { try { const res = await buildingsAPI.list({ is_active: true }); setBuildings(res.data); } catch {} }, []);
   const loadServices = useCallback(async () => { try { const res = await servicesAPI.list({ per_page: 1000 }); setServices(res.data.items || []); } catch {} }, []);
   const loadContractors = useCallback(async () => { try { const res = await usersAPI.list({ role: 'contractor' }); setContractors(res.data.items || []); } catch {} }, []);
-  const loadMaterials = useCallback(async () => { try { const res = await materialsAPI.list(); setAllMaterials(res.data.items || []); } catch {} }, []);
+  const loadMaterials = useCallback(async () => { try { const res = await materialsAPI.list({ per_page: 1000 }); setAllMaterials(res.data.items || []); } catch {} }, []);
 
   useEffect(() => {
     loadWork();

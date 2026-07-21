@@ -267,7 +267,7 @@ function MaterialsTab() {
 
   useEffect(() => { load(); }, []);
 
-  const load = async () => { try { const res = await materialsAPI.list(); setItems(res.data.items || []); } catch (e) {} };
+  const load = async () => { try { const res = await materialsAPI.list({ per_page: 1000 }); setItems(res.data.items || []); } catch (e) {} };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
