@@ -143,7 +143,7 @@ def _get_admin_username(db: Session, admin_id: int) -> str:
     return user.username if user else "unknown"
 
 
-def _build_full_metadata(db: Session, admin_id: int, total_size_bytes: int) -> dict:
+def _build_full_metadata(db: Session, admin_id: int) -> dict:
     settings = get_settings()
     db_name = settings.DATABASE_URL.rsplit("/", 1)[-1]
     return {
@@ -160,7 +160,6 @@ def _build_full_metadata(db: Session, admin_id: int, total_size_bytes: int) -> d
             "materials_count": db.query(Material).count(),
             "services_count": db.query(Service).count(),
         },
-        "total_size_bytes": total_size_bytes,
     }
 
 
@@ -177,7 +176,7 @@ def create_full_backup(
     backup_path = os.path.join(backup_dir, backup_id)
     os.makedirs(backup_path, exist_ok=True)
 
-    metadata = _build_full_metadata(db, admin.id, 0)
+    metadata = _build_full_metadata(db, admin.id)
     with open(os.path.join(backup_path, "metadata.json"), "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 
