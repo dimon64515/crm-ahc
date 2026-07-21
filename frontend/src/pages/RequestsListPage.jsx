@@ -177,6 +177,88 @@ export default function RequestsListPage() {
     return new Date(d).toLocaleDateString('ru-RU');
   };
 
+  const isOverdue = (req) => {
+    if (!req.due_date || req.status === 'completed') return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(req.due_date);
+    due.setHours(0, 0, 0, 0);
+    return due < today;
+  };
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const renderActions = (req) => (
+    <div style={styles.actionsGroup}>
+      <Link to={`/requests/${req.id}`} style={styles.smallLink}>Открыть</Link>
+      {canTake && req.status === 'new' && (
+        <button
+          onClick={() => handleAction(requestsAPI.take, req.id)}
+          disabled={actionId === req.id}
+          style={styles.actionBtn}
+        >
+          {actionId === req.id ? '…' : 'Взять в работу'}
+        </button>
+      )}
+      {canAssign && req.status !== 'completed' && (
+        <>
+          <select
+            value={selectedAssignments[req.id]?.userId || ''}
+            onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], userId: e.target.value } }))}
+            disabled={actionId === req.id}
+            style={styles.selectAssign}
+          >
+            <option value="">Исполнитель</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+            ))}
+          </select>
+          <select
+            value={selectedAssignments[req.id]?.serviceId || ''}
+            onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
+            disabled={actionId === req.id}
+            style={{ ...styles.selectAssign, minWidth: '140px' }}
+          >
+            <option value="">Услуга</option>
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleAssign(req.id)}
+            disabled={actionId === req.id || !selectedAssignments[req.id]?.userId}
+            style={styles.actionBtn}
+          >
+            {actionId === req.id ? '…' : 'Назначить'}
+          </button>
+        </>
+      )}
+      {canExtend(req) && (
+        <button
+          onClick={() => handleAction(requestsAPI.extend, req.id)}
+          disabled={actionId === req.id}
+          style={styles.secondaryBtn}
+        >
+          {actionId === req.id ? '…' : 'Продлить'}
+        </button>
+      )}
+      {canComplete(req) && (
+        <button
+          onClick={() => handleAction(requestsAPI.complete, req.id)}
+          disabled={actionId === req.id}
+          style={styles.successBtn}
+        >
+          {actionId === req.id ? '…' : 'Завершить'}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div>
       <div style={styles.header}>
@@ -191,7 +273,7 @@ export default function RequestsListPage() {
               cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
             }}
           >
-            🖨 Печать выбранных ({selectedIds.length})
+            🖨 Печать ({selectedIds.length})
           </button>
         )}
       </div>
@@ -241,6 +323,44 @@ export default function RequestsListPage() {
         <div style={styles.empty}>
           <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
           <div style={{ color: '#6b7280' }}>Заявки не найдены</div>
+        </div>
+      ) : isMobile ? (
+        <div style={styles.cards}>
+          {items.map((req) => (
+            <div key={req.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div style={styles.cardTitleRow}>
+                  {canPrint && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(req.id)}
+                      onChange={() => toggleSelection(req.id)}
+                      style={{ cursor: 'pointer', marginRight: '8px' }}
+                    />
+                  )}
+                  <span style={styles.cardId}>#{req.id}</span>
+                  <span style={{ ...styles.badge, ...statusStyle(req.status), marginLeft: '8px' }}>
+                    {statusLabel(req.status)}
+                  </span>
+                </div>
+                <div style={styles.cardBuilding}>{req.building?.name || req.building?.number || '—'}</div>
+              </div>
+              <div style={styles.cardBody}>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Описание:</span> {req.description || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Услуга:</span> {req.service?.name || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Создатель:</span> {req.creator?.full_name || req.creator?.username || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Исполнитель:</span> {req.executor?.full_name || req.executor?.username || '—'}</div>
+                <div style={{ ...styles.cardField, ...(isOverdue(req) ? styles.overdueField : {}) }}>
+                  <span style={styles.cardLabel}>Срок:</span>
+                  {formatDate(req.due_date)} · продлений: {req.extended_count || 0}
+                  {isOverdue(req) && <span style={{ ...styles.overdueText, marginLeft: '8px' }}>Просрочено</span>}
+                </div>
+              </div>
+              <div style={styles.cardActions}>
+                {renderActions(req)}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -293,70 +413,10 @@ export default function RequestsListPage() {
                   </td>
                   <td>{req.creator?.full_name || req.creator?.username || '—'}</td>
                   <td>{req.executor?.full_name || req.executor?.username || '—'}</td>
-                  <td className="tabular-nums">{formatDate(req.due_date)}</td>
+                  <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <Link to={`/requests/${req.id}`} style={styles.smallLink}>Открыть</Link>
-                    {canTake && req.status === 'new' && (
-                      <button
-                        onClick={() => handleAction(requestsAPI.take, req.id)}
-                        disabled={actionId === req.id}
-                        style={styles.actionBtn}
-                      >
-                        {actionId === req.id ? '…' : 'Взять в работу'}
-                      </button>
-                    )}
-                    {canAssign && req.status !== 'completed' && (
-                      <>
-                        <select
-                          value={selectedAssignments[req.id]?.userId || ''}
-                          onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], userId: e.target.value } }))}
-                          disabled={actionId === req.id}
-                          style={styles.selectAssign}
-                        >
-                          <option value="">Исполнитель</option>
-                          {users.map((u) => (
-                            <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={selectedAssignments[req.id]?.serviceId || ''}
-                          onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
-                          disabled={actionId === req.id}
-                          style={{ ...styles.selectAssign, minWidth: '140px' }}
-                        >
-                          <option value="">Услуга</option>
-                          {services.map((s) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => handleAssign(req.id)}
-                          disabled={actionId === req.id || !selectedAssignments[req.id]?.userId}
-                          style={styles.actionBtn}
-                        >
-                          {actionId === req.id ? '…' : 'Назначить'}
-                        </button>
-                      </>
-                    )}
-                    {canExtend(req) && (
-                      <button
-                        onClick={() => handleAction(requestsAPI.extend, req.id)}
-                        disabled={actionId === req.id}
-                        style={styles.secondaryBtn}
-                      >
-                        {actionId === req.id ? '…' : 'Продлить'}
-                      </button>
-                    )}
-                    {canComplete(req) && (
-                      <button
-                        onClick={() => handleAction(requestsAPI.complete, req.id)}
-                        disabled={actionId === req.id}
-                        style={styles.successBtn}
-                      >
-                        {actionId === req.id ? '…' : 'Завершить'}
-                      </button>
-                    )}
+                    {renderActions(req)}
                   </td>
                 </tr>
               ))}
@@ -388,4 +448,17 @@ const styles = {
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
   empty: { textAlign: 'center', padding: '48px 16px' },
+  cards: { display: 'flex', flexDirection: 'column', gap: '12px' },
+  card: { background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '14px' },
+  cardHeader: { marginBottom: '10px' },
+  cardTitleRow: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' },
+  cardId: { fontWeight: 700, fontSize: '15px', color: '#111827' },
+  cardBuilding: { fontSize: '14px', color: '#4b5563', fontWeight: 500 },
+  cardBody: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' },
+  cardField: { fontSize: '14px', color: '#374151', lineHeight: '1.4', wordBreak: 'break-word' },
+  cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
+  cardActions: { marginTop: '4px' },
+  actionsGroup: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' },
+  overdueText: { color: '#dc2626', fontWeight: 600 },
+  overdueField: { color: '#dc2626' },
 };
