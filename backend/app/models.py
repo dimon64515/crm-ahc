@@ -40,7 +40,7 @@ class Service(Base):
     __tablename__ = "services"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False, index=True)
+    name = Column(String(1000), nullable=False, index=True)
     unit = Column(String(50))
     price = Column(DECIMAL(12, 2), nullable=False)
     is_active = Column(Boolean, default=True)
