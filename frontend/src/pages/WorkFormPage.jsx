@@ -64,14 +64,14 @@ export default function WorkFormPage() {
 
   const loadServices = useCallback(async (input) => {
     try {
-      const res = await servicesAPI.list(input);
+      const res = await servicesAPI.list({ search: input, per_page: 1000 });
       return (res.data.items || []).map(s => ({ value: s.id, label: s.name, price: s.price, unit: s.unit }));
     } catch (e) { return []; }
   }, []);
 
   const loadMaterials = useCallback(async (input) => {
     try {
-      const res = await materialsAPI.list(input);
+      const res = await materialsAPI.list({ search: input, per_page: 1000 });
       return (res.data.items || []).map(m => ({ value: m.id, label: `${m.name}${m.unit ? ` (${m.unit})` : ''}`, price: m.price, unit: m.unit }));
     } catch (e) { return []; }
   }, []);
