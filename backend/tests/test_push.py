@@ -155,7 +155,7 @@ def test_subscribe_updates_existing_subscription():
         assert subs[0].auth == "new-auth"
 
 
-def test_contractor_cannot_subscribe():
+def test_contractor_can_subscribe():
     with TestingSessionLocal() as db:
         contractor = User(
             username="contractor_push_subscribe",
@@ -178,7 +178,13 @@ def test_contractor_cannot_subscribe():
                 "auth": "auth-value",
             },
         )
-        assert response.status_code == 403, response.text
+        assert response.status_code == 200, response.text
+
+        sub = db.query(PushSubscription).filter(
+            PushSubscription.user_id == contractor.id,
+            PushSubscription.endpoint == "https://push.example/contractor",
+        ).first()
+        assert sub is not None
 
 
 def test_test_send_push_triggers_send_to_roles():

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.dependencies import require_director
+from app.core.dependencies import require_director, get_current_user
 from app.database import get_db
 from app.models import PushSubscription, User
 from app.schemas import PushSubscriptionCreate, PushSubscriptionUnsubscribe
@@ -41,7 +41,7 @@ def vapid_public_key():
 def subscribe(
     data: PushSubscriptionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_director),
+    current_user: User = Depends(get_current_user),
 ):
     existing = db.query(PushSubscription).filter(
         PushSubscription.user_id == current_user.id,
@@ -81,7 +81,7 @@ def subscribe(
 def unsubscribe(
     data: PushSubscriptionUnsubscribe,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_director),
+    current_user: User = Depends(get_current_user),
 ):
     db.query(PushSubscription).filter(
         PushSubscription.user_id == current_user.id,
