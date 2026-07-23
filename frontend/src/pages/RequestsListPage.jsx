@@ -24,6 +24,118 @@ const statusStyle = (status) => {
   return map[status] || { background: '#f3f4f6', color: '#374151' };
 };
 
+function downloadZip(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
+function PrimaryActionButton({ req, actionId, canTake, canCompleteReq, onAction }) {
+  if (req.status === 'new' && canTake) {
+    return (
+      <button
+        onClick={() => onAction(requestsAPI.take, req.id)}
+        disabled={actionId === req.id}
+        style={styles.actionBtn}
+      >
+        {actionId === req.id ? '…' : 'Взять в работу'}
+      </button>
+    );
+  }
+  if (req.status === 'in_progress' && canCompleteReq) {
+    return (
+      <button
+        onClick={() => onAction(requestsAPI.complete, req.id)}
+        disabled={actionId === req.id}
+        style={styles.successBtn}
+      >
+        {actionId === req.id ? '…' : 'Завершить'}
+      </button>
+    );
+  }
+  return null;
+}
+
+function ActionsMenu({ req, actionId, canAssign, canPrint, canExtendReq, onAction, onAssign, onPrintOne, loadRequests }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  const handlePrintOneLocal = async () => {
+    setIsOpen(false);
+    try {
+      const res = await requestsAPI.print([req.id]);
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      onPrintOne(blob, `zayavka_${req.id}.zip`);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Ошибка формирования печатной формы');
+    }
+  };
+
+  const handleAssignMenu = async () => {
+    setIsOpen(false);
+    onAssign(req.id, req.executor?.id, req.service?.id, loadRequests);
+  };
+
+  return (
+    <div style={styles.menuContainer} ref={menuRef}>
+      <button
+        type="button"
+        aria-label="Ещё действия"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((v) => !v)}
+        disabled={actionId === req.id}
+        style={styles.menuBtn}
+      >
+        ⋯
+      </button>
+      {isOpen && (
+        <div style={styles.menuDropdown} role="menu">
+          <Link to={`/requests/${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
+            Открыть
+          </Link>
+          {canAssign && req.status === 'new' && (
+            <button type="button" style={styles.menuItem} role="menuitem" onClick={handleAssignMenu}>
+              Назначить
+            </button>
+          )}
+          {canPrint && (
+            <button type="button" style={styles.menuItem} role="menuitem" onClick={handlePrintOneLocal}>
+              Печать
+            </button>
+          )}
+          {canExtendReq && (
+            <button type="button" style={styles.menuItem} role="menuitem" onClick={() => { setIsOpen(false); onAction(requestsAPI.extend, req.id); }}>
+              Продлить
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RequestsListPage() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -178,16 +290,9 @@ export default function RequestsListPage() {
     try {
       const res = await requestsAPI.print(selectedIds);
       const blob = new Blob([res.data], { type: 'application/zip' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
       const idsPart = selectedIds.slice(0, 5).join('_');
       const suffix = selectedIds.length > 5 ? `_и_еще_${selectedIds.length - 5}` : '';
-      link.download = `zayavki_${idsPart}${suffix}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      downloadZip(blob, `zayavki_${idsPart}${suffix}.zip`);
     } catch (e) {
       alert(e.response?.data?.detail || 'Ошибка формирования печатных форм');
     }
@@ -221,125 +326,20 @@ export default function RequestsListPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const PrimaryActionButton = ({ req }) => {
-    if (req.status === 'new' && canTake) {
-      return (
-        <button
-          onClick={() => handleAction(requestsAPI.take, req.id)}
-          disabled={actionId === req.id}
-          style={styles.actionBtn}
-        >
-          {actionId === req.id ? '…' : 'Взять в работу'}
-        </button>
-      );
+  const handleAssign = async (requestId, executorId, serviceId, reload) => {
+    if (!executorId) {
+      alert('Сначала выберите исполнителя в колонке «Исполнитель»');
+      return;
     }
-    if (req.status === 'in_progress' && canComplete(req)) {
-      return (
-        <button
-          onClick={() => handleAction(requestsAPI.complete, req.id)}
-          disabled={actionId === req.id}
-          style={styles.successBtn}
-        >
-          {actionId === req.id ? '…' : 'Завершить'}
-        </button>
-      );
+    setActionId(requestId);
+    try {
+      await requestsAPI.assign(requestId, executorId, serviceId);
+      await reload();
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
+    } finally {
+      setActionId(null);
     }
-    return null;
-  };
-
-  const ActionsMenu = ({ req }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const menuRef = useRef(null);
-
-    useEffect(() => {
-      const handleClickOutside = (e) => {
-        if (menuRef.current && !menuRef.current.contains(e.target)) {
-          setIsOpen(false);
-        }
-      };
-      const handleEscape = (e) => {
-        if (e.key === 'Escape') setIsOpen(false);
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-        document.removeEventListener('keydown', handleEscape);
-      };
-    }, []);
-
-    const handlePrintOne = async () => {
-      setIsOpen(false);
-      try {
-        const res = await requestsAPI.print([req.id]);
-        const blob = new Blob([res.data], { type: 'application/zip' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `zayavka_${req.id}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } catch (e) {
-        alert(e.response?.data?.detail || 'Ошибка формирования печатной формы');
-      }
-    };
-
-    const handleAssignMenu = async () => {
-      setIsOpen(false);
-      const executorId = req.executor?.id;
-      if (!executorId) {
-        alert('Сначала выберите исполнителя в колонке «Исполнитель»');
-        return;
-      }
-      setActionId(req.id);
-      try {
-        await requestsAPI.assign(req.id, executorId, req.service?.id);
-        await loadRequests();
-      } catch (e) {
-        alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
-      } finally {
-        setActionId(null);
-      }
-    };
-
-    return (
-      <div style={styles.menuContainer} ref={menuRef}>
-        <button
-          type="button"
-          aria-label="Ещё действия"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((v) => !v)}
-          disabled={actionId === req.id}
-          style={styles.menuBtn}
-        >
-          ⋯
-        </button>
-        {isOpen && (
-          <div style={styles.menuDropdown} role="menu">
-            <Link to={`/requests/${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
-              Открыть
-            </Link>
-            {canAssign && req.status === 'new' && (
-              <button type="button" style={styles.menuItem} role="menuitem" onClick={handleAssignMenu}>
-                Назначить
-              </button>
-            )}
-            {canPrint && (
-              <button type="button" style={styles.menuItem} role="menuitem" onClick={handlePrintOne}>
-                Печать
-              </button>
-            )}
-            {canExtend(req) && (
-              <button type="button" style={styles.menuItem} role="menuitem" onClick={() => { setIsOpen(false); handleAction(requestsAPI.extend, req.id); }}>
-                Продлить
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -440,8 +440,24 @@ export default function RequestsListPage() {
                 </div>
               </div>
               <div style={styles.cardActions}>
-                <PrimaryActionButton req={req} />
-                <ActionsMenu req={req} />
+                <PrimaryActionButton
+                  req={req}
+                  actionId={actionId}
+                  canTake={canTake}
+                  canCompleteReq={canComplete(req)}
+                  onAction={handleAction}
+                />
+                <ActionsMenu
+                  req={req}
+                  actionId={actionId}
+                  canAssign={canAssign}
+                  canPrint={canPrint}
+                  canExtendReq={canExtend(req)}
+                  onAction={handleAction}
+                  onAssign={handleAssign}
+                  onPrintOne={downloadZip}
+                  loadRequests={loadRequests}
+                />
               </div>
             </div>
           ))}
@@ -499,10 +515,26 @@ export default function RequestsListPage() {
                   <td>{renderExecutorCell(req)}</td>
                   <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'normal', width: '1%' }}>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap', width: '1%' }}>
                     <div style={{ ...styles.actionsGroup, justifyContent: 'flex-end' }}>
-                      <PrimaryActionButton req={req} />
-                      <ActionsMenu req={req} />
+                      <PrimaryActionButton
+                        req={req}
+                        actionId={actionId}
+                        canTake={canTake}
+                        canCompleteReq={canComplete(req)}
+                        onAction={handleAction}
+                      />
+                      <ActionsMenu
+                        req={req}
+                        actionId={actionId}
+                        canAssign={canAssign}
+                        canPrint={canPrint}
+                        canExtendReq={canExtend(req)}
+                        onAction={handleAction}
+                        onAssign={handleAssign}
+                        onPrintOne={downloadZip}
+                        loadRequests={loadRequests}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -527,9 +559,9 @@ const styles = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   description: { maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   badge: { display: 'inline-block', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600 },
-  actionBtn: { display: 'inline-block', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
+  actionBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
   inlineSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' },
-  successBtn: { display: 'inline-block', padding: '4px 10px', background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
+  successBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
   empty: { textAlign: 'center', padding: '48px 16px' },
@@ -543,7 +575,7 @@ const styles = {
   cardField: { fontSize: '14px', color: '#374151', lineHeight: '1.4', wordBreak: 'break-word' },
   cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
   cardActions: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center' },
-  actionsGroup: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' },
+  actionsGroup: { display: 'inline-flex', gap: '6px', alignItems: 'center' },
   menuContainer: { position: 'relative', display: 'inline-block' },
   menuBtn: { width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '16px', fontWeight: 700, color: '#4b5563' },
   menuDropdown: { position: 'absolute', right: 0, top: '38px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, minWidth: '160px', overflow: 'hidden', textAlign: 'left' },

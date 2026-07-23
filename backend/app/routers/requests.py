@@ -234,6 +234,8 @@ def update_request(
     if req.status == "completed":
         raise HTTPException(status_code=400, detail="Нельзя редактировать завершённую заявку")
 
+    update_fields = data.model_dump(exclude_unset=True)
+
     if data.building_id is not None:
         building = db.query(Building).filter(Building.id == data.building_id, Building.is_active == True).first()
         if not building:
@@ -243,16 +245,18 @@ def update_request(
     if data.description is not None:
         req.description = data.description.strip()
 
-    if data.service_id is not None:
-        service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
-        if not service:
-            raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
+    if 'service_id' in update_fields:
+        if data.service_id is not None:
+            service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
+            if not service:
+                raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
         req.service_id = data.service_id
 
-    if data.assigned_to is not None:
-        executor = db.query(User).filter(User.id == data.assigned_to, User.is_active == True).first()
-        if not executor or executor.role not in ("contractor", "director", "admin"):
-            raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
+    if 'assigned_to' in update_fields:
+        if data.assigned_to is not None:
+            executor = db.query(User).filter(User.id == data.assigned_to, User.is_active == True).first()
+            if not executor or executor.role not in ("contractor", "director", "admin"):
+                raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
         req.assigned_to = data.assigned_to
 
     db.commit()

@@ -701,3 +701,149 @@ def test_list_requests_default_sorting():
     # Нераспределённая заявка должна быть выше распределённой
     assert ids.index(unassigned.id) < ids.index(assigned.id)
     db.close()
+
+
+def test_director_can_update_service_and_executor():
+    db = TestingSessionLocal()
+    director = User(username="director_update_svc", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_update_svc", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    comendant = User(username="comendant_update_svc", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="80", name="Корпус 80", is_active=True)
+    service = Service(name="Покраска", unit="м2", price=Decimal("500.00"), is_active=True)
+    db.add_all([director, contractor, comendant, building, service])
+    db.commit()
+    db.refresh(service)
+
+    req = Request(building_id=building.id, description="Обновить поля", status="new", created_by=comendant.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_update_svc", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"service_id": service.id, "assigned_to": contractor.id},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["service"]["id"] == service.id
+    assert data["executor"]["id"] == contractor.id
+    db.close()
+
+
+def test_update_request_rejects_inactive_service():
+    db = TestingSessionLocal()
+    director = User(username="director_update_inactive_svc", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    comendant = User(username="comendant_update_inactive_svc", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="81", name="Корпус 81", is_active=True)
+    service = Service(name="Услуга неактивна", unit="шт", price=Decimal("100.00"), is_active=False)
+    db.add_all([director, comendant, building, service])
+    db.commit()
+    db.refresh(service)
+
+    req = Request(building_id=building.id, description="Проверка услуги", status="new", created_by=comendant.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_update_inactive_svc", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"service_id": service.id},
+    )
+    assert response.status_code == 400, response.text
+    db.close()
+
+
+def test_update_request_rejects_inactive_executor():
+    db = TestingSessionLocal()
+    director = User(username="director_update_inactive_exec", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_update_inactive_exec", hashed_password=get_password_hash("pass"), role="contractor", is_active=False)
+    comendant = User(username="comendant_update_inactive_exec", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="82", name="Корпус 82", is_active=True)
+    db.add_all([director, contractor, comendant, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Проверка исполнителя", status="new", created_by=comendant.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_update_inactive_exec", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"assigned_to": contractor.id},
+    )
+    assert response.status_code == 400, response.text
+    db.close()
+
+
+def test_update_request_rejects_comendant_as_executor():
+    db = TestingSessionLocal()
+    director = User(username="director_update_comendant_exec", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    comendant = User(username="comendant_update_comendant_exec", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="83", name="Корпус 83", is_active=True)
+    db.add_all([director, comendant, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Проверка роли исполнителя", status="new", created_by=comendant.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_update_comendant_exec", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"assigned_to": comendant.id},
+    )
+    assert response.status_code == 400, response.text
+    db.close()
+
+
+def test_director_can_clear_service_and_executor():
+    db = TestingSessionLocal()
+    director = User(username="director_clear_svc", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_clear_svc", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    comendant = User(username="comendant_clear_svc", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="84", name="Корпус 84", is_active=True)
+    service = Service(name="Услуга для очистки", unit="шт", price=Decimal("200.00"), is_active=True)
+    db.add_all([director, contractor, comendant, building, service])
+    db.commit()
+    db.refresh(service)
+
+    req = Request(building_id=building.id, description="Очистить поля", status="new", created_by=comendant.id,
+                  assigned_to=contractor.id, service_id=service.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_clear_svc", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"service_id": None, "assigned_to": None},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["service"] is None
+    assert data["executor"] is None
+    db.close()
