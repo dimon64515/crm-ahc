@@ -131,6 +131,52 @@ export default function RequestsListPage() {
     }
   };
 
+  const handleUpdateField = async (requestId, field, value) => {
+    setActionId(requestId);
+    try {
+      await requestsAPI.update(requestId, { [field]: value ? parseInt(value, 10) : null });
+      await loadRequests();
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Ошибка обновления заявки');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const renderServiceCell = (req) => {
+    if (!canAssign) return req.service?.name || '—';
+    return (
+      <select
+        value={req.service?.id || ''}
+        onChange={(e) => handleUpdateField(req.id, 'service_id', e.target.value)}
+        disabled={actionId === req.id || req.status === 'completed'}
+        style={styles.inlineSelect}
+      >
+        <option value="">Не выбрана</option>
+        {services.map((s) => (
+          <option key={s.id} value={s.id}>{s.name}</option>
+        ))}
+      </select>
+    );
+  };
+
+  const renderExecutorCell = (req) => {
+    if (!canAssign) return req.executor?.full_name || req.executor?.username || '—';
+    return (
+      <select
+        value={req.executor?.id || ''}
+        onChange={(e) => handleUpdateField(req.id, 'assigned_to', e.target.value)}
+        disabled={actionId === req.id || req.status === 'completed'}
+        style={styles.inlineSelect}
+      >
+        <option value="">Не назначен</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+        ))}
+      </select>
+    );
+  };
+
   const toggleSelection = (id) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -347,9 +393,9 @@ export default function RequestsListPage() {
               </div>
               <div style={styles.cardBody}>
                 <div style={styles.cardField}><span style={styles.cardLabel}>Описание:</span> {req.description || '—'}</div>
-                <div style={styles.cardField}><span style={styles.cardLabel}>Услуга:</span> {req.service?.name || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Услуга:</span> {renderServiceCell(req)}</div>
                 <div style={styles.cardField}><span style={styles.cardLabel}>Создатель:</span> {req.creator?.full_name || req.creator?.username || '—'}</div>
-                <div style={styles.cardField}><span style={styles.cardLabel}>Исполнитель:</span> {req.executor?.full_name || req.executor?.username || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Исполнитель:</span> {renderExecutorCell(req)}</div>
                 <div style={{ ...styles.cardField, ...(isOverdue(req) ? styles.overdueField : {}) }}>
                   <span style={styles.cardLabel}>Срок:</span>
                   {formatDate(req.due_date)} · продлений: {req.extended_count || 0}
@@ -405,14 +451,14 @@ export default function RequestsListPage() {
                   <td className="tabular-nums">{req.id}</td>
                   <td>{req.building?.name || req.building?.number || '—'}</td>
                   <td style={styles.description} title={req.description}>{req.description || '—'}</td>
-                  <td>{req.service?.name || '—'}</td>
+                  <td>{renderServiceCell(req)}</td>
                   <td>
                     <span style={{ ...styles.badge, ...statusStyle(req.status) }}>
                       {statusLabel(req.status)}
                     </span>
                   </td>
                   <td>{req.creator?.full_name || req.creator?.username || '—'}</td>
-                  <td>{req.executor?.full_name || req.executor?.username || '—'}</td>
+                  <td>{renderExecutorCell(req)}</td>
                   <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'normal', width: '1%' }}>
@@ -443,6 +489,7 @@ const styles = {
   smallLink: { display: 'inline-block', padding: '4px 10px', color: '#2563eb', textDecoration: 'none', fontSize: '13px', fontWeight: 500 },
   actionBtn: { display: 'inline-block', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
   selectAssign: { display: 'inline-block', padding: '4px 8px', background: '#fffbeb', color: '#d97706', border: '1px solid #fcd34d', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px', minWidth: '110px' },
+  inlineSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' },
   secondaryBtn: { display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
   successBtn: { display: 'inline-block', padding: '4px 10px', background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
