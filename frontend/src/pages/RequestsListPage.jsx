@@ -222,7 +222,7 @@ export default function RequestsListPage() {
             value={selectedAssignments[req.id]?.serviceId || ''}
             onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
             disabled={actionId === req.id}
-            style={styles.selectAssign}
+            style={{ ...styles.selectAssign, width: 'auto', minWidth: 'auto', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden' }}
           >
             <option value="">Услуга</option>
             {services.map((s) => (
