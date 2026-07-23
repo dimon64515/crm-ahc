@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, buildingsAPI, usersAPI, servicesAPI } from '../api';
@@ -34,7 +34,6 @@ export default function RequestsListPage() {
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [actionId, setActionId] = useState(null);
-  const [selectedAssignments, setSelectedAssignments] = useState({});
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
@@ -114,21 +113,50 @@ export default function RequestsListPage() {
     }
   };
 
-  const handleAssign = async (requestId) => {
-    const assignment = selectedAssignments[requestId] || {};
-    const userId = assignment.userId;
-    const serviceId = assignment.serviceId;
-    if (!userId) return;
+  const handleUpdateField = async (requestId, field, value) => {
     setActionId(requestId);
     try {
-      await requestsAPI.assign(requestId, parseInt(userId, 10), serviceId ? parseInt(serviceId, 10) : undefined);
-      setSelectedAssignments((prev) => ({ ...prev, [requestId]: {} }));
+      await requestsAPI.update(requestId, { [field]: value ? parseInt(value, 10) : null });
       await loadRequests();
     } catch (e) {
-      alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
+      alert(e.response?.data?.detail || 'Ошибка обновления заявки');
     } finally {
       setActionId(null);
     }
+  };
+
+  const renderServiceCell = (req) => {
+    if (!canAssign) return req.service?.name || '—';
+    return (
+      <select
+        value={req.service?.id || ''}
+        onChange={(e) => handleUpdateField(req.id, 'service_id', e.target.value)}
+        disabled={actionId === req.id || req.status === 'completed'}
+        style={styles.inlineSelect}
+      >
+        <option value="">Не выбрана</option>
+        {services.map((s) => (
+          <option key={s.id} value={s.id}>{s.name}</option>
+        ))}
+      </select>
+    );
+  };
+
+  const renderExecutorCell = (req) => {
+    if (!canAssign) return req.executor?.full_name || req.executor?.username || '—';
+    return (
+      <select
+        value={req.executor?.id || ''}
+        onChange={(e) => handleUpdateField(req.id, 'assigned_to', e.target.value)}
+        disabled={actionId === req.id || req.status === 'completed'}
+        style={styles.inlineSelect}
+      >
+        <option value="">Не назначен</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+        ))}
+      </select>
+    );
   };
 
   const toggleSelection = (id) => {
@@ -193,10 +221,9 @@ export default function RequestsListPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const renderActions = (req, actionStyle = {}) => (
-    <div style={{ ...styles.actionsGroup, ...actionStyle }}>
-      <Link to={`/requests/${req.id}`} style={styles.smallLink}>Открыть</Link>
-      {canTake && req.status === 'new' && (
+  const PrimaryActionButton = ({ req }) => {
+    if (req.status === 'new' && canTake) {
+      return (
         <button
           onClick={() => handleAction(requestsAPI.take, req.id)}
           disabled={actionId === req.id}
@@ -204,50 +231,10 @@ export default function RequestsListPage() {
         >
           {actionId === req.id ? '…' : 'Взять в работу'}
         </button>
-      )}
-      {canAssign && req.status !== 'completed' && (
-        <>
-          <select
-            value={selectedAssignments[req.id]?.userId || ''}
-            onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], userId: e.target.value } }))}
-            disabled={actionId === req.id}
-            style={styles.selectAssign}
-          >
-            <option value="">Исполнитель</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
-            ))}
-          </select>
-          <select
-            value={selectedAssignments[req.id]?.serviceId || ''}
-            onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
-            disabled={actionId === req.id}
-            style={{ ...styles.selectAssign, width: 'auto', minWidth: 'auto', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden' }}
-          >
-            <option value="">Услуга</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => handleAssign(req.id)}
-            disabled={actionId === req.id || !selectedAssignments[req.id]?.userId}
-            style={styles.actionBtn}
-          >
-            {actionId === req.id ? '…' : 'Назначить'}
-          </button>
-        </>
-      )}
-      {canExtend(req) && (
-        <button
-          onClick={() => handleAction(requestsAPI.extend, req.id)}
-          disabled={actionId === req.id}
-          style={styles.secondaryBtn}
-        >
-          {actionId === req.id ? '…' : 'Продлить'}
-        </button>
-      )}
-      {canComplete(req) && (
+      );
+    }
+    if (req.status === 'in_progress' && canComplete(req)) {
+      return (
         <button
           onClick={() => handleAction(requestsAPI.complete, req.id)}
           disabled={actionId === req.id}
@@ -255,9 +242,105 @@ export default function RequestsListPage() {
         >
           {actionId === req.id ? '…' : 'Завершить'}
         </button>
-      )}
-    </div>
-  );
+      );
+    }
+    return null;
+  };
+
+  const ActionsMenu = ({ req }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (e) => {
+        if (menuRef.current && !menuRef.current.contains(e.target)) {
+          setIsOpen(false);
+        }
+      };
+      const handleEscape = (e) => {
+        if (e.key === 'Escape') setIsOpen(false);
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }, []);
+
+    const handlePrintOne = async () => {
+      setIsOpen(false);
+      try {
+        const res = await requestsAPI.print([req.id]);
+        const blob = new Blob([res.data], { type: 'application/zip' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `zayavka_${req.id}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(e.response?.data?.detail || 'Ошибка формирования печатной формы');
+      }
+    };
+
+    const handleAssignMenu = async () => {
+      setIsOpen(false);
+      const executorId = req.executor?.id;
+      if (!executorId) {
+        alert('Сначала выберите исполнителя в колонке «Исполнитель»');
+        return;
+      }
+      setActionId(req.id);
+      try {
+        await requestsAPI.assign(req.id, executorId, req.service?.id);
+        await loadRequests();
+      } catch (e) {
+        alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
+      } finally {
+        setActionId(null);
+      }
+    };
+
+    return (
+      <div style={styles.menuContainer} ref={menuRef}>
+        <button
+          type="button"
+          aria-label="Ещё действия"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((v) => !v)}
+          disabled={actionId === req.id}
+          style={styles.menuBtn}
+        >
+          ⋯
+        </button>
+        {isOpen && (
+          <div style={styles.menuDropdown} role="menu">
+            <Link to={`/requests/${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
+              Открыть
+            </Link>
+            {canAssign && req.status === 'new' && (
+              <button type="button" style={styles.menuItem} role="menuitem" onClick={handleAssignMenu}>
+                Назначить
+              </button>
+            )}
+            {canPrint && (
+              <button type="button" style={styles.menuItem} role="menuitem" onClick={handlePrintOne}>
+                Печать
+              </button>
+            )}
+            {canExtend(req) && (
+              <button type="button" style={styles.menuItem} role="menuitem" onClick={() => { setIsOpen(false); handleAction(requestsAPI.extend, req.id); }}>
+                Продлить
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -347,9 +430,9 @@ export default function RequestsListPage() {
               </div>
               <div style={styles.cardBody}>
                 <div style={styles.cardField}><span style={styles.cardLabel}>Описание:</span> {req.description || '—'}</div>
-                <div style={styles.cardField}><span style={styles.cardLabel}>Услуга:</span> {req.service?.name || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Услуга:</span> {renderServiceCell(req)}</div>
                 <div style={styles.cardField}><span style={styles.cardLabel}>Создатель:</span> {req.creator?.full_name || req.creator?.username || '—'}</div>
-                <div style={styles.cardField}><span style={styles.cardLabel}>Исполнитель:</span> {req.executor?.full_name || req.executor?.username || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Исполнитель:</span> {renderExecutorCell(req)}</div>
                 <div style={{ ...styles.cardField, ...(isOverdue(req) ? styles.overdueField : {}) }}>
                   <span style={styles.cardLabel}>Срок:</span>
                   {formatDate(req.due_date)} · продлений: {req.extended_count || 0}
@@ -357,7 +440,8 @@ export default function RequestsListPage() {
                 </div>
               </div>
               <div style={styles.cardActions}>
-                {renderActions(req)}
+                <PrimaryActionButton req={req} />
+                <ActionsMenu req={req} />
               </div>
             </div>
           ))}
@@ -405,18 +489,21 @@ export default function RequestsListPage() {
                   <td className="tabular-nums">{req.id}</td>
                   <td>{req.building?.name || req.building?.number || '—'}</td>
                   <td style={styles.description} title={req.description}>{req.description || '—'}</td>
-                  <td>{req.service?.name || '—'}</td>
+                  <td>{renderServiceCell(req)}</td>
                   <td>
                     <span style={{ ...styles.badge, ...statusStyle(req.status) }}>
                       {statusLabel(req.status)}
                     </span>
                   </td>
                   <td>{req.creator?.full_name || req.creator?.username || '—'}</td>
-                  <td>{req.executor?.full_name || req.executor?.username || '—'}</td>
+                  <td>{renderExecutorCell(req)}</td>
                   <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'normal', width: '1%' }}>
-                    {renderActions(req, { justifyContent: 'flex-end' })}
+                    <div style={{ ...styles.actionsGroup, justifyContent: 'flex-end' }}>
+                      <PrimaryActionButton req={req} />
+                      <ActionsMenu req={req} />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -440,10 +527,8 @@ const styles = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   description: { maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   badge: { display: 'inline-block', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600 },
-  smallLink: { display: 'inline-block', padding: '4px 10px', color: '#2563eb', textDecoration: 'none', fontSize: '13px', fontWeight: 500 },
   actionBtn: { display: 'inline-block', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
-  selectAssign: { display: 'inline-block', padding: '4px 8px', background: '#fffbeb', color: '#d97706', border: '1px solid #fcd34d', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px', minWidth: '110px' },
-  secondaryBtn: { display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
+  inlineSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' },
   successBtn: { display: 'inline-block', padding: '4px 10px', background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', marginLeft: '4px' },
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
@@ -457,8 +542,12 @@ const styles = {
   cardBody: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' },
   cardField: { fontSize: '14px', color: '#374151', lineHeight: '1.4', wordBreak: 'break-word' },
   cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
-  cardActions: { marginTop: '4px' },
+  cardActions: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center' },
   actionsGroup: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' },
+  menuContainer: { position: 'relative', display: 'inline-block' },
+  menuBtn: { width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '16px', fontWeight: 700, color: '#4b5563' },
+  menuDropdown: { position: 'absolute', right: 0, top: '38px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, minWidth: '160px', overflow: 'hidden', textAlign: 'left' },
+  menuItem: { display: 'block', width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', fontSize: '13px', textAlign: 'left', cursor: 'pointer', color: '#374151', textDecoration: 'none', boxSizing: 'border-box' },
   overdueText: { color: '#dc2626', fontWeight: 600 },
   overdueField: { color: '#dc2626' },
 };

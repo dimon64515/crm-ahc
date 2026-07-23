@@ -243,6 +243,18 @@ def update_request(
     if data.description is not None:
         req.description = data.description.strip()
 
+    if data.service_id is not None:
+        service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
+        if not service:
+            raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
+        req.service_id = data.service_id
+
+    if data.assigned_to is not None:
+        executor = db.query(User).filter(User.id == data.assigned_to, User.is_active == True).first()
+        if not executor or executor.role not in ("contractor", "director", "admin"):
+            raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
+        req.assigned_to = data.assigned_to
+
     db.commit()
     db.refresh(req)
     return build_request_response(req)

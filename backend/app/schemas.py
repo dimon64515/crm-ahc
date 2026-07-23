@@ -365,6 +365,8 @@ class RequestPrintPayload(BaseModel):
 class RequestUpdate(BaseModel):
     description: Optional[str] = Field(None, min_length=5)
     building_id: Optional[int] = None
+    service_id: Optional[int] = None
+    assigned_to: Optional[int] = None
 
     @field_validator('description')
     @classmethod
