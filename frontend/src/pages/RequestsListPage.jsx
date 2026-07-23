@@ -222,7 +222,7 @@ export default function RequestsListPage() {
             value={selectedAssignments[req.id]?.serviceId || ''}
             onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
             disabled={actionId === req.id}
-            style={{ ...styles.selectAssign, minWidth: '140px' }}
+            style={styles.selectAssign}
           >
             <option value="">Услуга</option>
             {services.map((s) => (
@@ -415,7 +415,7 @@ export default function RequestsListPage() {
                   <td>{req.executor?.full_name || req.executor?.username || '—'}</td>
                   <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <td style={{ textAlign: 'right', whiteSpace: 'normal', width: '1%' }}>
                     {renderActions(req, { justifyContent: 'flex-end' })}
                   </td>
                 </tr>
