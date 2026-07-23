@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, buildingsAPI, usersAPI, servicesAPI } from '../api';
@@ -34,7 +34,6 @@ export default function RequestsListPage() {
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [actionId, setActionId] = useState(null);
-  const [selectedAssignments, setSelectedAssignments] = useState({});
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
@@ -109,23 +108,6 @@ export default function RequestsListPage() {
       await loadRequests();
     } catch (e) {
       alert(e.response?.data?.detail || 'Ошибка выполнения действия');
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleAssign = async (requestId) => {
-    const assignment = selectedAssignments[requestId] || {};
-    const userId = assignment.userId;
-    const serviceId = assignment.serviceId;
-    if (!userId) return;
-    setActionId(requestId);
-    try {
-      await requestsAPI.assign(requestId, parseInt(userId, 10), serviceId ? parseInt(serviceId, 10) : undefined);
-      setSelectedAssignments((prev) => ({ ...prev, [requestId]: {} }));
-      await loadRequests();
-    } catch (e) {
-      alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
     } finally {
       setActionId(null);
     }
@@ -239,10 +221,9 @@ export default function RequestsListPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const renderActions = (req, actionStyle = {}) => (
-    <div style={{ ...styles.actionsGroup, ...actionStyle }}>
-      <Link to={`/requests/${req.id}`} style={styles.smallLink}>Открыть</Link>
-      {canTake && req.status === 'new' && (
+  const PrimaryActionButton = ({ req }) => {
+    if (req.status === 'new' && canTake) {
+      return (
         <button
           onClick={() => handleAction(requestsAPI.take, req.id)}
           disabled={actionId === req.id}
@@ -250,50 +231,10 @@ export default function RequestsListPage() {
         >
           {actionId === req.id ? '…' : 'Взять в работу'}
         </button>
-      )}
-      {canAssign && req.status !== 'completed' && (
-        <>
-          <select
-            value={selectedAssignments[req.id]?.userId || ''}
-            onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], userId: e.target.value } }))}
-            disabled={actionId === req.id}
-            style={styles.selectAssign}
-          >
-            <option value="">Исполнитель</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
-            ))}
-          </select>
-          <select
-            value={selectedAssignments[req.id]?.serviceId || ''}
-            onChange={(e) => setSelectedAssignments((prev) => ({ ...prev, [req.id]: { ...prev[req.id], serviceId: e.target.value } }))}
-            disabled={actionId === req.id}
-            style={{ ...styles.selectAssign, width: 'auto', minWidth: 'auto', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden' }}
-          >
-            <option value="">Услуга</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => handleAssign(req.id)}
-            disabled={actionId === req.id || !selectedAssignments[req.id]?.userId}
-            style={styles.actionBtn}
-          >
-            {actionId === req.id ? '…' : 'Назначить'}
-          </button>
-        </>
-      )}
-      {canExtend(req) && (
-        <button
-          onClick={() => handleAction(requestsAPI.extend, req.id)}
-          disabled={actionId === req.id}
-          style={styles.secondaryBtn}
-        >
-          {actionId === req.id ? '…' : 'Продлить'}
-        </button>
-      )}
-      {canComplete(req) && (
+      );
+    }
+    if (req.status === 'in_progress' && canComplete(req)) {
+      return (
         <button
           onClick={() => handleAction(requestsAPI.complete, req.id)}
           disabled={actionId === req.id}
@@ -301,9 +242,105 @@ export default function RequestsListPage() {
         >
           {actionId === req.id ? '…' : 'Завершить'}
         </button>
-      )}
-    </div>
-  );
+      );
+    }
+    return null;
+  };
+
+  const ActionsMenu = ({ req }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (e) => {
+        if (menuRef.current && !menuRef.current.contains(e.target)) {
+          setIsOpen(false);
+        }
+      };
+      const handleEscape = (e) => {
+        if (e.key === 'Escape') setIsOpen(false);
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }, []);
+
+    const handlePrintOne = async () => {
+      setIsOpen(false);
+      try {
+        const res = await requestsAPI.print([req.id]);
+        const blob = new Blob([res.data], { type: 'application/zip' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `zayavka_${req.id}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(e.response?.data?.detail || 'Ошибка формирования печатной формы');
+      }
+    };
+
+    const handleAssignMenu = async () => {
+      setIsOpen(false);
+      const executorId = req.executor?.id;
+      if (!executorId) {
+        alert('Сначала выберите исполнителя в колонке «Исполнитель»');
+        return;
+      }
+      setActionId(req.id);
+      try {
+        await requestsAPI.assign(req.id, executorId, req.service?.id);
+        await loadRequests();
+      } catch (e) {
+        alert(e.response?.data?.detail || 'Ошибка назначения исполнителя');
+      } finally {
+        setActionId(null);
+      }
+    };
+
+    return (
+      <div style={styles.menuContainer} ref={menuRef}>
+        <button
+          type="button"
+          aria-label="Ещё действия"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((v) => !v)}
+          disabled={actionId === req.id}
+          style={styles.menuBtn}
+        >
+          ⋯
+        </button>
+        {isOpen && (
+          <div style={styles.menuDropdown} role="menu">
+            <Link to={`/requests/${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
+              Открыть
+            </Link>
+            {canAssign && req.status === 'new' && (
+              <button type="button" style={styles.menuItem} role="menuitem" onClick={handleAssignMenu}>
+                Назначить
+              </button>
+            )}
+            {canPrint && (
+              <button type="button" style={styles.menuItem} role="menuitem" onClick={handlePrintOne}>
+                Печать
+              </button>
+            )}
+            {canExtend(req) && (
+              <button type="button" style={styles.menuItem} role="menuitem" onClick={() => { setIsOpen(false); handleAction(requestsAPI.extend, req.id); }}>
+                Продлить
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -402,8 +439,9 @@ export default function RequestsListPage() {
                   {isOverdue(req) && <span style={{ ...styles.overdueText, marginLeft: '8px' }}>Просрочено</span>}
                 </div>
               </div>
-              <div style={styles.cardActions}>
-                {renderActions(req)}
+              <div style={{ ...styles.cardActions, display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <PrimaryActionButton req={req} />
+                <ActionsMenu req={req} />
               </div>
             </div>
           ))}
@@ -462,7 +500,10 @@ export default function RequestsListPage() {
                   <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'normal', width: '1%' }}>
-                    {renderActions(req, { justifyContent: 'flex-end' })}
+                    <div style={{ ...styles.actionsGroup, justifyContent: 'flex-end' }}>
+                      <PrimaryActionButton req={req} />
+                      <ActionsMenu req={req} />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -506,6 +547,10 @@ const styles = {
   cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
   cardActions: { marginTop: '4px' },
   actionsGroup: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' },
+  menuContainer: { position: 'relative', display: 'inline-block' },
+  menuBtn: { width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '16px', fontWeight: 700, color: '#4b5563' },
+  menuDropdown: { position: 'absolute', right: 0, top: '38px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, minWidth: '160px', overflow: 'hidden', textAlign: 'left' },
+  menuItem: { display: 'block', width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', fontSize: '13px', textAlign: 'left', cursor: 'pointer', color: '#374151', textDecoration: 'none', boxSizing: 'border-box' },
   overdueText: { color: '#dc2626', fontWeight: 600 },
   overdueField: { color: '#dc2626' },
 };
