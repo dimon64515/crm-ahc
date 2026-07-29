@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Select from 'react-select';
 import AsyncSelect from 'react-select/async';
-import { buildingsAPI, servicesAPI, materialsAPI, worksAPI } from '../api';
+import { buildingsAPI, servicesAPI, materialsAPI, worksAPI, requestsAPI } from '../api';
 
 export default function WorkFormPage() {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState([]);
+  const [searchParams] = useSearchParams();
+  const [requestId, setRequestId] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [services, setServices] = useState([{ id: 1, selected: null, quantity: 1, price: '', unit: '', total: 0 }]);
   const [description, setDescription] = useState('');
@@ -19,7 +22,15 @@ export default function WorkFormPage() {
   const [isDragging, setIsDragging] = useState(false);
   const photoInputRef = useRef(null);
 
-  useEffect(() => { loadBuildings(); loadDraft(); }, []);
+  useEffect(() => {
+    loadBuildings();
+    loadDraft();
+    const id = searchParams.get('request_id');
+    if (id) {
+      setRequestId(id);
+      loadRequestDetails(id);
+    }
+  }, []);
 
   // beforeunload: предупреждение при уходе с несохранённой формой
   useEffect(() => {
@@ -68,6 +79,25 @@ export default function WorkFormPage() {
       return (res.data.items || []).map(s => ({ value: s.id, label: s.name, price: s.price, unit: s.unit }));
     } catch (e) { return []; }
   }, []);
+
+  const loadRequestDetails = async (id) => {
+    try {
+      const res = await requestsAPI.get(id);
+      const request = res.data;
+      setRequestId(id);
+      if (request.building?.id) {
+        setSelectedBuilding({ value: request.building.id, label: request.building.name || request.building.number });
+      }
+      if (request.description) {
+        setDescription(request.description);
+      }
+      if (request.service?.id) {
+        setServices([{ id: 1, selected: { value: request.service.id, label: request.service.name, price: request.service.price, unit: request.service.unit }, quantity: 1, price: request.service.price, unit: request.service.unit, total: parseFloat(request.service.price || 0) }]);
+      }
+    } catch (e) {
+      // ignore missing request info
+    }
+  };
 
   const loadMaterials = useCallback(async (input) => {
     try {
@@ -235,6 +265,7 @@ export default function WorkFormPage() {
           material_id: m.selected.value,
           quantity: parseFloat(m.quantity),
         })),
+        request_id: requestId ? parseInt(requestId, 10) : undefined,
       };
 
       console.log('[WorkForm] payload:', payload);
@@ -291,11 +322,16 @@ export default function WorkFormPage() {
   return (
     <div>
       <div style={styles.header}>
-        <h1 style={styles.title}>Новая запись о работе</h1>
+        <h1 style={styles.title}>{requestId ? `Отчет по заявке #${requestId}` : 'Новая запись о работе'}</h1>
         {photoCounter > 0 && (
           <span style={styles.photoBadge}>{photoCounter}/20 фото</span>
         )}
       </div>
+      {requestId && (
+        <div style={styles.requestBanner}>
+          Этот отчет будет связан с заявкой #{requestId}. После заполнения данных заявка может перейти в статус «Завершена».
+        </div>
+      )}
 
       {error && (
         <div role="alert" style={styles.error}>{error}</div>

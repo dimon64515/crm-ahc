@@ -358,38 +358,25 @@ def complete_request(
     if current_user.role == "contractor" and req.assigned_to != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
 
-    if req.service_id is None:
-        raise HTTPException(status_code=400, detail="Для завершения заявки необходимо назначить вид работ")
-
-    service = db.query(Service).filter(Service.id == req.service_id, Service.is_active == True).first()
-    if not service:
-        raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
-
-    executor_id = req.assigned_to or current_user.id
-    existing_work = db.query(Work).filter(Work.request_id == req.id).first()
+    existing_work = db.query(Work).options(selectinload(Work.photos), selectinload(Work.work_services), selectinload(Work.work_materials)).filter(Work.request_id == req.id).first()
     if not existing_work:
-        work = Work(
-            user_id=executor_id,
-            building_id=req.building_id,
-            request_id=req.id,
-            work_date=date.today(),
-            description=req.description,
-            materials_total_price=0,
-            total_price=service.price,
-        )
-        db.add(work)
-        db.flush()
+        raise HTTPException(status_code=400, detail="Сначала заполните отчет по работе и прикрепите фото")
 
-        work_service = WorkService(
-            work_id=work.id,
-            service_id=req.service_id,
-            quantity=1,
-            unit_price=service.price,
-            total_price=service.price,
-        )
-        db.add(work_service)
+    if not existing_work.description or not existing_work.description.strip():
+        raise HTTPException(status_code=400, detail="Описание работы обязательно")
+    if len(existing_work.photos) == 0:
+        raise HTTPException(status_code=400, detail="Для завершения заявки необходимо прикрепить хотя бы одно фото работы")
+    if len(existing_work.work_materials) == 0:
+        raise HTTPException(status_code=400, detail="Для завершения заявки необходимо добавить материалы в отчет")
+    if len(existing_work.work_services) == 0:
+        raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одна услуга в отчете")
+
+    if current_user.role == "contractor" and req.assigned_to != current_user.id:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
 
     req.status = "completed"
+    if req.assigned_to is None:
+        req.assigned_to = existing_work.user_id
     db.commit()
     db.refresh(req)
     return build_request_response(req)

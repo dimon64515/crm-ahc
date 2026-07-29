@@ -134,14 +134,32 @@ def create_work(
     services = _validate_services(db, data.services)
     service_map = {s.id: s for s in services}
 
-    # Проверка дублей материалов
+    work_user_id = current_user.id
+    work_building_id = data.building_id
+    if data.request_id is not None:
+        req = db.query(Request).filter(Request.id == data.request_id).first()
+        if not req:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+        if req.status == "completed":
+            raise HTTPException(status_code=400, detail="Нельзя создавать отчет для завершённой заявки")
+        if current_user.role == 'contractor' and req.assigned_to is not None and req.assigned_to != current_user.id:
+            raise HTTPException(status_code=403, detail="Заявка назначена другому исполнителю")
+
+        if req.status == "new":
+            req.status = "in_progress"
+        if current_user.role == 'contractor' and req.assigned_to is None:
+            req.assigned_to = current_user.id
+
+        work_user_id = req.assigned_to or current_user.id
+        work_building_id = req.building_id
+
     material_ids = [m.material_id for m in data.materials]
     if len(material_ids) != len(set(material_ids)):
         raise HTTPException(status_code=400, detail="Материалы не должны дублироваться")
 
     work = Work(
-        user_id=current_user.id,
-        building_id=data.building_id,
+        user_id=work_user_id,
+        building_id=work_building_id,
         request_id=data.request_id,
         work_date=data.work_date,
         description=data.description,

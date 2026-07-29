@@ -205,6 +205,7 @@ export default function RequestDetailPage() {
   );
   const canExtend = isAdmin && req?.status !== 'completed';
   const canEdit = isDirector && req?.status !== 'completed';
+  const canCreateWork = req && req.status !== 'completed' && ['contractor', 'director', 'admin'].includes(user.role) && (user.role !== 'contractor' || req.assigned_to === user.id || req.assigned_to === null);
 
   const backPath = isComendant ? '/my-requests' : '/requests';
 
@@ -373,6 +374,15 @@ export default function RequestDetailPage() {
                     style={styles.successBtn}
                   >
                     {actionLoading ? '…' : 'Завершить'}
+                  </button>
+                )}
+                {canCreateWork && (
+                  <button
+                    onClick={() => navigate(`/works/new?request_id=${id}`)}
+                    disabled={actionLoading}
+                    style={styles.primaryBtn}
+                  >
+                    {actionLoading ? '…' : 'Оформить отчет'}
                   </button>
                 )}
                 {canExtend && (
