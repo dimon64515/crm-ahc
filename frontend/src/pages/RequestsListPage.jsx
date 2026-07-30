@@ -115,6 +115,11 @@ function ActionsMenu({ req, actionId, canAssign, canPrint, canExtendReq, onActio
           <Link to={`/requests/${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
             Открыть
           </Link>
+          {req.status !== 'completed' && (
+            <Link to={`/works/new?request_id=${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
+              {req.has_work ? 'Изменить отчёт' : 'Создать отчёт'}
+            </Link>
+          )}
           {canAssign && req.status === 'new' && (
             <button type="button" style={styles.menuItem} role="menuitem" onClick={handleAssignMenu}>
               Назначить

@@ -39,7 +39,11 @@ def _send_push_on_new_request(roles: list[str], title: str, body: str, link: str
         db.close()
 
 
-def build_request_response(req: Request) -> dict:
+def build_request_response(req: Request, db: Session = None) -> dict:
+    has_work = False
+    if db and req.id:
+        has_work = db.query(Work).filter(Work.request_id == req.id).first() is not None
+
     return {
         "id": req.id,
         "building": req.building,
@@ -63,10 +67,15 @@ def build_request_response(req: Request) -> dict:
         ],
         "created_at": req.created_at,
         "updated_at": req.updated_at,
+        "has_work": has_work,
     }
 
 
-def build_request_list_item(req: Request) -> dict:
+def build_request_list_item(req: Request, db: Session = None) -> dict:
+    has_work = False
+    if db and req.id:
+        has_work = db.query(Work).filter(Work.request_id == req.id).first() is not None
+
     return {
         "id": req.id,
         "building": req.building,
@@ -79,6 +88,7 @@ def build_request_list_item(req: Request) -> dict:
         "extended_count": req.extended_count,
         "photos_count": len(req.photos),
         "created_at": req.created_at,
+        "has_work": has_work,
     }
 
 
@@ -135,7 +145,7 @@ def create_request(
         link=link,
     )
 
-    return build_request_response(request)
+    return build_request_response(request, db)
 
 
 @router.get("", response_model=RequestListResponse)
@@ -172,7 +182,7 @@ def list_requests(
 
     items = query.order_by(Request.assigned_to.asc().nullsfirst(), Request.created_at.desc()).all()
     return {
-        "items": [build_request_list_item(r) for r in items],
+        "items": [build_request_list_item(r, db) for r in items],
         "total": len(items),
     }
 
@@ -189,7 +199,7 @@ def list_my_requests(
         selectinload(Request.photos),
     ).filter(Request.created_by == current_user.id).order_by(Request.created_at.desc()).all()
     return {
-        "items": [build_request_list_item(r) for r in items],
+        "items": [build_request_list_item(r, db) for r in items],
         "total": len(items),
     }
 
