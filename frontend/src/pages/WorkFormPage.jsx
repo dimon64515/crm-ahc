@@ -29,6 +29,8 @@ export default function WorkFormPage() {
     if (id) {
       setRequestId(id);
       loadRequestDetails(id);
+    } else if (user?.role === 'contractor') {
+      setError('Для создания отчёта выберите заявку из списка');
     }
   }, []);
 
@@ -319,6 +321,23 @@ export default function WorkFormPage() {
     placeholder: (base) => ({ ...base, color: '#9ca3af' }),
   };
 
+  // Для подрядчика без заявки — показываем сообщение с переходом к заявкам
+  if (user?.role === 'contractor' && !requestId) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '40px auto', padding: '20px' }}>
+        <div style={{ background: '#fef2f2', color: '#b91c1c', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #fecaca' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px', margin: 0 }}>Создание отчёта только через заявку</h2>
+          <p style={{ fontSize: '14px', margin: 0 }}>
+            Подрядчики могут создавать отчёты только на основе заявок. Выберите заявку из списка и нажмите «Создать отчёт».
+          </p>
+        </div>
+        <a href="/requests" style={{ display: 'inline-block', padding: '12px 24px', background: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500 }}>
+          Перейти к заявкам
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={styles.header}>
@@ -510,6 +529,7 @@ const styles = {
   title: { fontSize: '22px', fontWeight: 700, letterSpacing: '-0.025em' },
   photoBadge: { background: '#dbeafe', color: '#1d4ed8', padding: '6px 14px', borderRadius: '9999px', fontSize: '13px', fontWeight: 600 },
   error: { background: '#fef2f2', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', border: '1px solid #fecaca' },
+  requestBanner: { background: '#eff6ff', color: '#1e40af', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', border: '1px solid #bfdbfe' },
   form: { display: 'flex', flexDirection: 'column', gap: '20px' },
   row: { display: 'flex', gap: '16px', flexWrap: 'wrap' },
   field: { display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '180px' },
