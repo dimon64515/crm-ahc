@@ -4,10 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, buildingsAPI, usersAPI, servicesAPI } from '../api';
 
 const STATUS_BUTTONS = [
-  { value: '', label: 'Все', style: { background: '#f3f4f6', color: '#374151', borderColor: '#d1d5db' } },
   { value: 'new', label: 'Новые', style: { background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' } },
   { value: 'in_progress', label: 'В работе', style: { background: '#fffbeb', color: '#d97706', borderColor: '#fde68a' } },
-  { value: 'completed', label: 'Завершены', style: { background: '#f0fdf4', color: '#059669', borderColor: '#bbf7d0' } },
+  { value: 'completed', label: 'Завершённые', style: { background: '#f0fdf4', color: '#059669', borderColor: '#bbf7d0' } },
 ];
 
 const statusLabel = (status) => {
@@ -35,7 +34,8 @@ function downloadZip(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
-function PrimaryActionButton({ req, actionId, canTake, canCompleteReq, onAction }) {
+function PrimaryActionButton({ req, actionId, canTake, canCompleteReq, onAction, isContractor }) {
+  // Новая заявка — "Взять в работу"
   if (req.status === 'new' && canTake) {
     return (
       <button
@@ -47,7 +47,19 @@ function PrimaryActionButton({ req, actionId, canTake, canCompleteReq, onAction 
       </button>
     );
   }
-  if (req.status === 'in_progress' && canCompleteReq) {
+  // В работе и нет отчёта — "Создать отчёт" (только для подрядчика)
+  if (req.status === 'in_progress' && isContractor && !req.has_work) {
+    return (
+      <a
+        href={`/works/new?request_id=${req.id}`}
+        style={{ ...styles.actionBtn, display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
+      >
+        Создать отчёт
+      </a>
+    );
+  }
+  // В работе и есть отчёт — можно завершить
+  if (req.status === 'in_progress' && canCompleteReq && req.has_work) {
     return (
       <button
         onClick={() => onAction(requestsAPI.complete, req.id)}
@@ -146,7 +158,8 @@ export default function RequestsListPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [filters, setFilters] = useState({ status: '', building_id: '' });
+  const isContractor = user?.role === 'contractor';
+  const [filters, setFilters] = useState({ status: 'new', building_id: '' });
   const [buildings, setBuildings] = useState([]);
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
@@ -193,14 +206,21 @@ export default function RequestsListPage() {
       if (filters.status) params.status = filters.status;
       if (filters.building_id) params.building_id = filters.building_id;
       const res = await requestsAPI.list(params);
-      setItems(res.data.items || []);
+      let items = res.data.items || [];
+
+      // Для подрядчика: фильтруем "В работе" и "Завершённые" только по своим заявкам
+      if (isContractor && (filters.status === 'in_progress' || filters.status === 'completed')) {
+        items = items.filter(req => req.assigned_to?.id === user.id);
+      }
+
+      setItems(items);
     } catch (e) {
       setError(e.response?.data?.detail || 'Ошибка загрузки заявок');
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.building_id]);
+  }, [filters.status, filters.building_id, isContractor, user?.id]);
 
   useEffect(() => {
     loadBuildings();
@@ -451,18 +471,21 @@ export default function RequestsListPage() {
                   canTake={canTake}
                   canCompleteReq={canComplete(req)}
                   onAction={handleAction}
+                  isContractor={isContractor}
                 />
-                <ActionsMenu
-                  req={req}
-                  actionId={actionId}
-                  canAssign={canAssign}
-                  canPrint={canPrint}
-                  canExtendReq={canExtend(req)}
-                  onAction={handleAction}
-                  onAssign={handleAssign}
-                  onPrintOne={downloadZip}
-                  loadRequests={loadRequests}
-                />
+                {!isContractor && (
+                  <ActionsMenu
+                    req={req}
+                    actionId={actionId}
+                    canAssign={canAssign}
+                    canPrint={canPrint}
+                    canExtendReq={canExtend(req)}
+                    onAction={handleAction}
+                    onAssign={handleAssign}
+                    onPrintOne={downloadZip}
+                    loadRequests={loadRequests}
+                  />
+                )}
               </div>
             </div>
           ))}

@@ -8,7 +8,6 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import WorkDetailPage from './pages/WorkDetailPage';
 import PhotoBackupPage from './pages/PhotoBackupPage';
-import MyWorksPage from './pages/MyWorksPage';
 import RequestNewPage from './pages/RequestNewPage';
 import RequestsListPage from './pages/RequestsListPage';
 import RequestDetailPage from './pages/RequestDetailPage';
@@ -76,16 +75,6 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={['director', 'admin']}>
             <Layout>
               <PhotoBackupPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-works"
-        element={
-          <ProtectedRoute allowedRoles={['contractor', 'director', 'admin']}>
-            <Layout>
-              <MyWorksPage />
             </Layout>
           </ProtectedRoute>
         }
