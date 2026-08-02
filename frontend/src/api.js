@@ -165,12 +165,18 @@ export const requestsAPI = {
       onUploadProgress,
     });
   },
+  delete: (id) => api.delete(`/requests/${id}`),
+  updateAdmin: (id, data) => api.put(`/requests/${id}/admin`, data),
 };
 
 export const pushAPI = {
   getVapidPublicKey: () => api.get('/push/vapid-public-key'),
   subscribe: (data) => api.post('/push/subscribe', data),
   unsubscribe: (data) => api.delete('/push/unsubscribe', { data }),
+};
+
+export const auditLogsAPI = {
+  list: (params) => api.get('/admin/audit-logs', { params }),
 };
 
 export function urlBase64ToUint8Array(base64String) {
