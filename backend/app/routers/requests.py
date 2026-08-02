@@ -10,13 +10,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
-from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService
-from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate
+from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService, AuditLog
+from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate, RequestDeleteResponse
 from app.core.dependencies import get_current_user, require_comendant, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
 from app.services.push_service import send_push_to_roles
 from app.services.request_print_service import fill_request_template
+from app.services.audit_service import log_action, serialize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -409,6 +410,45 @@ def extend_request(
     db.commit()
     db.refresh(req)
     return build_request_response(req)
+
+
+@router.delete("/{request_id}", response_model=RequestDeleteResponse)
+def delete_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Удаляет заявку (soft delete). Только для администраторов."""
+    req = db.query(Request).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if req.deleted_at is not None:
+        raise HTTPException(status_code=400, detail="Заявка уже удалена")
+
+    # Сохраняем old_values для audit log
+    old_values = serialize_for_log(req)
+
+    # Soft delete
+    req.deleted_at = datetime.utcnow()
+    db.commit()
+
+    # Записываем в audit log
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="deleted",
+        entity_type="request",
+        entity_id=req.id,
+        old_values=old_values,
+        new_values=None,
+    )
+    db.commit()
+
+    return RequestDeleteResponse(
+        success=True,
+        deleted_at=req.deleted_at
+    )
 
 
 @router.post("/print")
