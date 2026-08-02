@@ -210,7 +210,7 @@ export default function RequestsListPage() {
 
       // Для подрядчика: фильтруем "В работе" и "Завершённые" только по своим заявкам
       if (isContractor && (filters.status === 'in_progress' || filters.status === 'completed')) {
-        items = items.filter(req => req.assigned_to?.id === user.id);
+        items = items.filter(req => req.executor?.id === user.id);
       }
 
       setItems(items);

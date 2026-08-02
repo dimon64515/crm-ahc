@@ -10,7 +10,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user || user.role === 'contractor') {
-      navigate('/works/new');
+      navigate('/requests');
     }
   }, [user, navigate]);
 
@@ -74,7 +74,14 @@ function DetailedReport() {
   const [sortOrder, setSortOrder] = useState('desc');
   const [loading, setLoading] = useState(false);
   const [totals, setTotals] = useState({ service_total: 0, materials_total: 0, total: 0 });
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { loadBuildings(); loadServices(); loadContractors(); loadWorks(); }, []);
 
@@ -212,71 +219,110 @@ function DetailedReport() {
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>Дата {sortIcon('date')}</th>
-              <th>Корпус</th>
-              <th>Подрядчик</th>
-              <th>Вид работы</th>
-              <th>Наименование</th>
-              <th style={{ textAlign: 'center' }}>Ед.изм.</th>
-              <th style={{ textAlign: 'center' }}>Кол-во</th>
-              <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('price')}>Цена {sortIcon('price')}</th>
-              <th style={{ textAlign: 'right' }}>Сумма работ</th>
-              <th style={{ textAlign: 'right' }}>Сумма мат.</th>
-              <th style={{ textAlign: 'right' }}>ИТОГО</th>
-              <th style={{ textAlign: 'center' }}>Фото</th>
-            </tr>
-          </thead>
-          <tbody>
-            {works.map(w => {
-              const serviceTotal = (w.services || []).reduce((sum, s) => sum + parseFloat(s.total_price || 0), 0);
-              const serviceNames = (w.services || []).map(s => s.name).join(', ') || '—';
-              return (
-              <tr key={w.id} style={{ cursor: 'pointer' }} onClick={(e) => { if (!e.target.closest('button')) navigate(`/works/${w.id}`); }}>
-                <td>{w.work_date}</td>
-                <td>{w.building?.number}</td>
-                <td>{w.created_by?.full_name || w.created_by?.username}</td>
-                <td>{serviceNames}</td>
-                <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={w.description}>{w.description}</td>
-                <td style={{ textAlign: 'center' }}>{(w.services || []).map(s => s.unit).filter(Boolean).join(', ') || '—'}</td>
-                <td style={{ textAlign: 'center' }} className="tabular-nums">{(w.services || []).map(s => s.quantity).join(', ') || '—'}</td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                    <span>{(w.services || []).map(s => parseFloat(s.unit_price || 0).toFixed(2)).join(', ') || '—'}</span>
-                    {user.role === 'admin' && (
-                      <button onClick={(e) => { e.stopPropagation(); handleInlinePriceEdit(w.id, w.services); }} style={styles.inlineEditBtn} title="Изменить цену">✎</button>
-                    )}
-                  </div>
-                </td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{serviceTotal.toFixed(2)}</td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(w.materials_total_price || 0).toFixed(2)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{parseFloat(w.total_price || 0).toFixed(2)}</td>
-                <td style={{ textAlign: 'center' }}>{w.photos_count}</td>
+      {isMobile ? (
+        <div style={dashStyles.cards}>
+          {works.map(w => {
+            const serviceTotal = (w.services || []).reduce((sum, s) => sum + parseFloat(s.total_price || 0), 0);
+            const serviceNames = (w.services || []).map(s => s.name).join(', ') || '—';
+            return (
+              <div key={w.id} style={dashStyles.card} onClick={() => navigate(`/works/${w.id}`)}>
+                <div style={dashStyles.cardHeader}>
+                  <span style={dashStyles.cardDate}>{w.work_date}</span>
+                  <span style={dashStyles.cardTotal}>{parseFloat(w.total_price || 0).toFixed(2)} ₽</span>
+                </div>
+                <div style={dashStyles.cardBody}>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Корпус:</span> {w.building?.number || '—'}</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Подрядчик:</span> {w.created_by?.full_name || w.created_by?.username || '—'}</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Вид работы:</span> {serviceNames}</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Описание:</span> {w.description || '—'}</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Сумма работ:</span> {serviceTotal.toFixed(2)} ₽</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Сумма мат.:</span> {parseFloat(w.materials_total_price || 0).toFixed(2)} ₽</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Фото:</span> {w.photos_count || 0}</div>
+                </div>
+              </div>
+            );
+          })}
+          {works.length === 0 && !loading && (
+            <div style={dashStyles.empty}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
+              <div>Нет данных для отображения</div>
+              <div style={{ fontSize: '13px', marginTop: '4px' }}>Измените фильтры или создайте новую запись</div>
+            </div>
+          )}
+          {works.length > 0 && (
+            <div style={dashStyles.totalCard}>
+              <div style={dashStyles.totalLabel}>ИТОГО по странице:</div>
+              <div style={dashStyles.totalValue}>{totals.total.toFixed(2)} ₽</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>Дата {sortIcon('date')}</th>
+                <th>Корпус</th>
+                <th>Подрядчик</th>
+                <th>Вид работы</th>
+                <th>Наименование</th>
+                <th style={{ textAlign: 'center' }}>Ед.изм.</th>
+                <th style={{ textAlign: 'center' }}>Кол-во</th>
+                <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('price')}>Цена {sortIcon('price')}</th>
+                <th style={{ textAlign: 'right' }}>Сумма работ</th>
+                <th style={{ textAlign: 'right' }}>Сумма мат.</th>
+                <th style={{ textAlign: 'right' }}>ИТОГО</th>
+                <th style={{ textAlign: 'center' }}>Фото</th>
               </tr>
-              );
-            })}
-            {works.length === 0 && !loading && (
-              <tr><td colSpan={12} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 16px' }}>
-                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
-                <div>Нет данных для отображения</div>
-                <div style={{ fontSize: '13px', marginTop: '4px' }}>Измените фильтры или создайте новую запись</div>
-              </td></tr>
-            )}
-            {works.length > 0 && (
-              <tr style={{ background: '#eff6ff', fontWeight: 600 }}>
-                <td colSpan={8} style={{ textAlign: 'right', paddingRight: '16px' }}>ИТОГО по странице:</td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.service_total.toFixed(2)}</td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.materials_total.toFixed(2)}</td>
-                <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.total.toFixed(2)}</td>
-                <td></td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {works.map(w => {
+                const serviceTotal = (w.services || []).reduce((sum, s) => sum + parseFloat(s.total_price || 0), 0);
+                const serviceNames = (w.services || []).map(s => s.name).join(', ') || '—';
+                return (
+                <tr key={w.id} style={{ cursor: 'pointer' }} onClick={(e) => { if (!e.target.closest('button')) navigate(`/works/${w.id}`); }}>
+                  <td>{w.work_date}</td>
+                  <td>{w.building?.number}</td>
+                  <td>{w.created_by?.full_name || w.created_by?.username}</td>
+                  <td>{serviceNames}</td>
+                  <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={w.description}>{w.description}</td>
+                  <td style={{ textAlign: 'center' }}>{(w.services || []).map(s => s.unit).filter(Boolean).join(', ') || '—'}</td>
+                  <td style={{ textAlign: 'center' }} className="tabular-nums">{(w.services || []).map(s => s.quantity).join(', ') || '—'}</td>
+                  <td style={{ textAlign: 'right' }} className="tabular-nums">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                      <span>{(w.services || []).map(s => parseFloat(s.unit_price || 0).toFixed(2)).join(', ') || '—'}</span>
+                      {user.role === 'admin' && (
+                        <button onClick={(e) => { e.stopPropagation(); handleInlinePriceEdit(w.id, w.services); }} style={styles.inlineEditBtn} title="Изменить цену">✎</button>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right' }} className="tabular-nums">{serviceTotal.toFixed(2)}</td>
+                  <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(w.materials_total_price || 0).toFixed(2)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{parseFloat(w.total_price || 0).toFixed(2)}</td>
+                  <td style={{ textAlign: 'center' }}>{w.photos_count}</td>
+                </tr>
+                );
+              })}
+              {works.length === 0 && !loading && (
+                <tr><td colSpan={12} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 16px' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
+                  <div>Нет данных для отображения</div>
+                  <div style={{ fontSize: '13px', marginTop: '4px' }}>Измените фильтры или создайте новую запись</div>
+                </td></tr>
+              )}
+              {works.length > 0 && (
+                <tr style={{ background: '#eff6ff', fontWeight: 600 }}>
+                  <td colSpan={8} style={{ textAlign: 'right', paddingRight: '16px' }}>ИТОГО по странице:</td>
+                  <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.service_total.toFixed(2)}</td>
+                  <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.materials_total.toFixed(2)}</td>
+                  <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.total.toFixed(2)}</td>
+                  <td></td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div style={styles.pagination}>
@@ -387,7 +433,14 @@ function RequestsDashboard() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterBuilding, setFilterBuilding] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const canPrint = user?.role === 'director' || user?.role === 'admin';
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const statusLabel = { new: 'Новая', in_progress: 'В работе', completed: 'Завершена' };
   const statusStyle = {
@@ -547,6 +600,31 @@ function RequestsDashboard() {
         <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Загрузка…</div>
       ) : items.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Заявки не найдены</div>
+      ) : isMobile ? (
+        <div style={dashStyles.cards}>
+          {items.slice(0, 10).map((r) => (
+            <div key={r.id} style={dashStyles.detailCard} onClick={() => navigate(`/requests/${r.id}`)}>
+              <div style={dashStyles.cardHeader}>
+                <span style={{ fontWeight: 700, fontSize: '15px', color: '#111827' }}>#{r.id}</span>
+                <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, ...statusStyle[r.status] }}>
+                  {statusLabel[r.status] || r.status}
+                </span>
+              </div>
+              <div style={dashStyles.cardBody}>
+                <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Корпус:</span> {r.building?.name || r.building?.number || '—'}</div>
+                <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Описание:</span> {r.description || '—'}</div>
+                <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Исполнитель:</span> {r.executor?.full_name || r.executor?.username || '—'}</div>
+                <div style={{ ...dashStyles.cardField, ...(isOverdue(r) ? { color: '#dc2626' } : {}) }}>
+                  <span style={dashStyles.cardLabel}>Срок:</span> {formatDate(r.due_date)}
+                  {isOverdue(r) && <span style={{ marginLeft: '8px', fontWeight: 600 }}>Просрочено</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+          {items.length > 10 && (
+            <div style={{ textAlign: 'center', marginTop: '12px', color: '#6b7280', fontSize: '13px' }}>Показано 10 из {items.length}. Все заявки — на странице «Заявки».</div>
+          )}
+        </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={styles.table}>
@@ -612,6 +690,18 @@ function RequestsDashboard() {
 
 const dashStyles = {
   card: { padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  cards: { display: 'flex', flexDirection: 'column', gap: '12px' },
+  detailCard: { background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '14px', cursor: 'pointer' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+  cardDate: { fontWeight: 600, fontSize: '14px', color: '#2563eb' },
+  cardTotal: { fontWeight: 700, fontSize: '16px', color: '#059669' },
+  cardBody: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  cardField: { fontSize: '14px', color: '#374151', lineHeight: '1.4', wordBreak: 'break-word' },
+  cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
+  empty: { textAlign: 'center', padding: '48px 16px', color: '#6b7280' },
+  totalCard: { background: '#eff6ff', borderRadius: '12px', padding: '16px', marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  totalLabel: { fontWeight: 600, fontSize: '14px', color: '#1e40af' },
+  totalValue: { fontWeight: 700, fontSize: '18px', color: '#059669' },
 };
 
 const styles = {

@@ -247,6 +247,35 @@ tbody tr:hover {
   .layout-main {
     padding: 12px;
   }
+
+  /* Better touch targets on mobile */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Compact inputs on mobile */
+  input, select, textarea {
+    font-size: 16px; /* Prevent iOS zoom */
+  }
+
+  /* Small screens */
+  @media (max-width: 480px) {
+    .layout-main {
+      padding: 8px;
+    }
+
+    /* Stack form rows vertically on very small screens */
+    form > div[style*="flex"] {
+      flex-direction: column !important;
+      width: 100%;
+    }
+
+    form > div[style*="flex"] > * {
+      width: 100% !important;
+      min-width: 100% !important;
+    }
+  }
 }
 
 /* Print styles */

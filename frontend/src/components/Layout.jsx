@@ -44,9 +44,8 @@ export default function Layout({ children, fullWidth = false }) {
 
   const navItems = [];
   if (user.role === 'contractor') {
-    navItems.push({ to: '/works/new', label: 'Новая работа' });
-    navItems.push({ to: '/my-works', label: 'Мои записи' });
     navItems.push({ to: '/requests', label: 'Заявки' });
+    navItems.push({ to: '/works/new', label: 'Новая работа' });
   }
   if (user.role === 'comendant') {
     navItems.push({ to: '/requests/new', label: 'Новая заявка' });
@@ -59,6 +58,7 @@ export default function Layout({ children, fullWidth = false }) {
   }
   if (user.role === 'admin') {
     navItems.push({ to: '/settings', label: 'Настройки' });
+    navItems.push({ to: '/admin/logs', label: 'Журнал' });
   }
 
   return (

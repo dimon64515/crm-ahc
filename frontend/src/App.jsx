@@ -12,6 +12,7 @@ import RequestNewPage from './pages/RequestNewPage';
 import RequestsListPage from './pages/RequestsListPage';
 import RequestDetailPage from './pages/RequestDetailPage';
 import MyRequestsPage from './pages/MyRequestsPage';
+import AdminLogsPage from './pages/AdminLogsPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -65,6 +66,16 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={['admin']}>
             <Layout>
               <SettingsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/logs"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <Layout>
+              <AdminLogsPage />
             </Layout>
           </ProtectedRoute>
         }

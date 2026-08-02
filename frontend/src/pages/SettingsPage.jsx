@@ -49,6 +49,13 @@ function UsersTab() {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ username: '', full_name: '', email: '', phone: '', role: 'contractor', password: '' });
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -88,7 +95,29 @@ function UsersTab() {
         {editing && <button type="button" onClick={() => { setEditing(null); setForm({ username: '', full_name: '', email: '', phone: '', role: 'contractor', password: '' }); }} style={styles.secondaryBtn}>Отмена</button>}
       </form>
 
-      {loading ? <div style={styles.center}><div style={styles.spinner} /><p>Загрузка…</p></div> : (
+      {loading ? <div style={styles.center}><div style={styles.spinner} /><p>Загрузка…</p></div> : isMobile ? (
+        <div style={styles.cards}>
+          {items.map(u => (
+            <div key={u.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <span style={styles.cardTitle}>{u.username}</span>
+                <span style={statusBadge(u.is_active)}>{u.is_active ? 'Активен' : 'Неактивен'}</span>
+              </div>
+              <div style={styles.cardBody}>
+                <div style={styles.cardField}><span style={styles.cardLabel}>ФИО:</span> {u.full_name || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Email:</span> {u.email || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Телефон:</span> {u.phone || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Роль:</span> <span style={roleBadge(u.role)}>{roleLabel(u.role)}</span></div>
+              </div>
+              <div style={styles.cardActions}>
+                <button onClick={() => { setEditing(u.id); setForm({ username: u.username, full_name: u.full_name || '', email: u.email || '', phone: u.phone || '', role: u.role, password: '' }); }} style={styles.cardBtn}>Ред.</button>
+                {u.is_active && <button onClick={() => handleDeactivate(u.id)} style={styles.cardDangerBtn}>Деакт.</button>}
+              </div>
+            </div>
+          ))}
+          {items.length === 0 && <div style={styles.empty}>Нет пользователей</div>}
+        </div>
+      ) : (
         <table style={styles.table}>
           <thead><tr><th>Логин</th><th>ФИО</th><th>Email</th><th>Телефон</th><th>Роль</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
           <tbody>
@@ -118,6 +147,13 @@ function BuildingsTab() {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ number: '', name: '', address: '', area: '' });
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -149,31 +185,60 @@ function BuildingsTab() {
         <button type="submit" style={styles.primaryBtn}>{editing ? 'Сохранить' : 'Добавить'}</button>
         {editing && <button type="button" onClick={() => { setEditing(null); setForm({ number: '', name: '', address: '', area: '' }); }} style={styles.secondaryBtn}>Отмена</button>}
       </form>
-      <table style={styles.table}>
-        <thead><tr><th>№</th><th>Название</th><th>Адрес</th><th>Площадь</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
-        <tbody>
+      {isMobile ? (
+        <div style={styles.cards}>
           {items.map(b => (
-            <tr key={b.id} style={!b.is_active ? styles.inactiveRow : {}}>
-              <td>{b.number}</td>
-              <td>{b.name || '—'}</td>
-              <td>{b.address || '—'}</td>
-              <td className="tabular-nums">{b.area ? `${parseFloat(b.area).toFixed(1)} м²` : '—'}</td>
-              <td><span style={statusBadge(b.is_active)}>{b.is_active ? 'Активен' : 'Неактивен'}</span></td>
-              <td style={{ textAlign: 'right' }}>
+            <div key={b.id} style={{ ...styles.card, ...(!b.is_active ? styles.inactiveCard : {}) }}>
+              <div style={styles.cardHeader}>
+                <span style={styles.cardTitle}>№{b.number}</span>
+                <span style={statusBadge(b.is_active)}>{b.is_active ? 'Активен' : 'Неактивен'}</span>
+              </div>
+              <div style={styles.cardBody}>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Название:</span> {b.name || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Адрес:</span> {b.address || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Площадь:</span> {b.area ? `${parseFloat(b.area).toFixed(1)} м²` : '—'}</div>
+              </div>
+              <div style={styles.cardActions}>
                 {b.is_active ? (
                   <>
-                    <button onClick={() => { setEditing(b.id); setForm({ number: b.number, name: b.name || '', address: b.address || '', area: b.area || '' }); }} style={styles.smallLink}>Ред.</button>
-                    <button onClick={() => handleDeactivate(b.id)} style={styles.smallDanger}>Деакт.</button>
+                    <button onClick={() => { setEditing(b.id); setForm({ number: b.number, name: b.name || '', address: b.address || '', area: b.area || '' }); }} style={styles.cardBtn}>Ред.</button>
+                    <button onClick={() => handleDeactivate(b.id)} style={styles.cardDangerBtn}>Деакт.</button>
                   </>
                 ) : (
-                  <button onClick={() => handleActivate(b.id)} style={styles.smallSuccess}>Актив.</button>
+                  <button onClick={() => handleActivate(b.id)} style={styles.cardSuccessBtn}>Актив.</button>
                 )}
-              </td>
-            </tr>
+              </div>
+            </div>
           ))}
-          {items.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#6b7280', padding: '48px' }}>Нет корпусов</td></tr>}
-        </tbody>
-      </table>
+          {items.length === 0 && <div style={styles.empty}>Нет корпусов</div>}
+        </div>
+      ) : (
+        <table style={styles.table}>
+          <thead><tr><th>№</th><th>Название</th><th>Адрес</th><th>Площадь</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
+          <tbody>
+            {items.map(b => (
+              <tr key={b.id} style={!b.is_active ? styles.inactiveRow : {}}>
+                <td>{b.number}</td>
+                <td>{b.name || '—'}</td>
+                <td>{b.address || '—'}</td>
+                <td className="tabular-nums">{b.area ? `${parseFloat(b.area).toFixed(1)} м²` : '—'}</td>
+                <td><span style={statusBadge(b.is_active)}>{b.is_active ? 'Активен' : 'Неактивен'}</span></td>
+                <td style={{ textAlign: 'right' }}>
+                  {b.is_active ? (
+                    <>
+                      <button onClick={() => { setEditing(b.id); setForm({ number: b.number, name: b.name || '', address: b.address || '', area: b.area || '' }); }} style={styles.smallLink}>Ред.</button>
+                      <button onClick={() => handleDeactivate(b.id)} style={styles.smallDanger}>Деакт.</button>
+                    </>
+                  ) : (
+                    <button onClick={() => handleActivate(b.id)} style={styles.smallSuccess}>Актив.</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#6b7280', padding: '48px' }}>Нет корпусов</td></tr>}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -183,6 +248,13 @@ function ServicesTab() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', unit: '', price: '' });
   const [importResult, setImportResult] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -238,23 +310,44 @@ function ServicesTab() {
         </div>
       )}
 
-      <table style={styles.table}>
-        <thead><tr><th>Название</th><th>Ед. изм.</th><th style={{ textAlign: 'right' }}>Цена</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
-        <tbody>
+      {isMobile ? (
+        <div style={styles.cards}>
           {items.map(s => (
-            <tr key={s.id}>
-              <td>{s.name}</td>
-              <td>{s.unit || '—'}</td>
-              <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(s.price || 0).toFixed(2)}</td>
-              <td><span style={statusBadge(s.is_active)}>{s.is_active ? 'Активен' : 'Неактивен'}</span></td>
-              <td style={{ textAlign: 'right' }}>
-                <button onClick={() => { setEditing(s.id); setForm({ name: s.name, unit: s.unit || '', price: s.price || '' }); }} style={styles.smallLink}>Ред.</button>
-                {s.is_active && <button onClick={() => handleDeactivate(s.id)} style={styles.smallDanger}>Деакт.</button>}
-              </td>
-            </tr>
+            <div key={s.id} style={{ ...styles.card, ...(!s.is_active ? styles.inactiveCard : {}) }}>
+              <div style={styles.cardHeader}>
+                <span style={styles.cardTitle}>{s.name}</span>
+                <span style={statusBadge(s.is_active)}>{s.is_active ? 'Активен' : 'Неактивен'}</span>
+              </div>
+              <div style={styles.cardBody}>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Ед. изм.:</span> {s.unit || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Цена:</span> {parseFloat(s.price || 0).toFixed(2)} ₽</div>
+              </div>
+              <div style={styles.cardActions}>
+                <button onClick={() => { setEditing(s.id); setForm({ name: s.name, unit: s.unit || '', price: s.price || '' }); }} style={styles.cardBtn}>Ред.</button>
+                {s.is_active && <button onClick={() => handleDeactivate(s.id)} style={styles.cardDangerBtn}>Деакт.</button>}
+              </div>
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      ) : (
+        <table style={styles.table}>
+          <thead><tr><th>Название</th><th>Ед. изм.</th><th style={{ textAlign: 'right' }}>Цена</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
+          <tbody>
+            {items.map(s => (
+              <tr key={s.id}>
+                <td>{s.name}</td>
+                <td>{s.unit || '—'}</td>
+                <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(s.price || 0).toFixed(2)}</td>
+                <td><span style={statusBadge(s.is_active)}>{s.is_active ? 'Активен' : 'Неактивен'}</span></td>
+                <td style={{ textAlign: 'right' }}>
+                  <button onClick={() => { setEditing(s.id); setForm({ name: s.name, unit: s.unit || '', price: s.price || '' }); }} style={styles.smallLink}>Ред.</button>
+                  {s.is_active && <button onClick={() => handleDeactivate(s.id)} style={styles.smallDanger}>Деакт.</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -264,6 +357,13 @@ function MaterialsTab() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', unit: '', price: '' });
   const [importResult, setImportResult] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -319,23 +419,44 @@ function MaterialsTab() {
         </div>
       )}
 
-      <table style={styles.table}>
-        <thead><tr><th>Название</th><th>Ед. изм.</th><th style={{ textAlign: 'right' }}>Цена</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
-        <tbody>
+      {isMobile ? (
+        <div style={styles.cards}>
           {items.map(m => (
-            <tr key={m.id}>
-              <td>{m.name}</td>
-              <td>{m.unit || '—'}</td>
-              <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(m.price || 0).toFixed(2)}</td>
-              <td><span style={statusBadge(m.is_active)}>{m.is_active ? 'Активен' : 'Неактивен'}</span></td>
-              <td style={{ textAlign: 'right' }}>
-                <button onClick={() => { setEditing(m.id); setForm({ name: m.name, unit: m.unit || '', price: m.price || '' }); }} style={styles.smallLink}>Ред.</button>
-                {m.is_active && <button onClick={() => handleDeactivate(m.id)} style={styles.smallDanger}>Деакт.</button>}
-              </td>
-            </tr>
+            <div key={m.id} style={{ ...styles.card, ...(!m.is_active ? styles.inactiveCard : {}) }}>
+              <div style={styles.cardHeader}>
+                <span style={styles.cardTitle}>{m.name}</span>
+                <span style={statusBadge(m.is_active)}>{m.is_active ? 'Активен' : 'Неактивен'}</span>
+              </div>
+              <div style={styles.cardBody}>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Ед. изм.:</span> {m.unit || '—'}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Цена:</span> {parseFloat(m.price || 0).toFixed(2)} ₽</div>
+              </div>
+              <div style={styles.cardActions}>
+                <button onClick={() => { setEditing(m.id); setForm({ name: m.name, unit: m.unit || '', price: m.price || '' }); }} style={styles.cardBtn}>Ред.</button>
+                {m.is_active && <button onClick={() => handleDeactivate(m.id)} style={styles.cardDangerBtn}>Деакт.</button>}
+              </div>
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      ) : (
+        <table style={styles.table}>
+          <thead><tr><th>Название</th><th>Ед. изм.</th><th style={{ textAlign: 'right' }}>Цена</th><th>Статус</th><th style={{ textAlign: 'right' }}>Действия</th></tr></thead>
+          <tbody>
+            {items.map(m => (
+              <tr key={m.id}>
+                <td>{m.name}</td>
+                <td>{m.unit || '—'}</td>
+                <td style={{ textAlign: 'right' }} className="tabular-nums">{parseFloat(m.price || 0).toFixed(2)}</td>
+                <td><span style={statusBadge(m.is_active)}>{m.is_active ? 'Активен' : 'Неактивен'}</span></td>
+                <td style={{ textAlign: 'right' }}>
+                  <button onClick={() => { setEditing(m.id); setForm({ name: m.name, unit: m.unit || '', price: m.price || '' }); }} style={styles.smallLink}>Ред.</button>
+                  {m.is_active && <button onClick={() => handleDeactivate(m.id)} style={styles.smallDanger}>Деакт.</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -350,6 +471,13 @@ function BackupsTab() {
   const [restoreName, setRestoreName] = useState('');
   const [validateLoading, setValidateLoading] = useState(false);
   const [validateResult, setValidateResult] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { load(); loadBuildings(); loadContractors(); }, []);
 
@@ -525,6 +653,32 @@ function BackupsTab() {
           <div style={{ fontSize: '32px', marginBottom: '8px' }}>📦</div>
           <div style={{ color: '#6b7280' }}>Нет резервных копий</div>
         </div>
+      ) : isMobile ? (
+        <div style={styles.cards}>
+          {backups.map(b => (
+            <div key={b.backup_id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <span style={typeBadge(b.type)}>{b.type === 'full' ? 'Полная' : b.type === 'photos' ? 'Фото' : 'БД'}</span>
+                <span style={statusBadge(b.status === 'completed')}>{b.status === 'completed' ? 'Готова' : b.status}</span>
+              </div>
+              <div style={styles.cardBody}>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Создана:</span> {formatDate(b.created_at)}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Размер:</span> {formatSize((b.size_mb || 0) * 1024 * 1024)}</div>
+                <div style={styles.cardField}><span style={styles.cardLabel}>Частей:</span> {b.parts_count || 1}</div>
+              </div>
+              <div style={styles.cardActions}>
+                {(b.parts_count || 1) > 1 ? (
+                  Array.from({ length: b.parts_count || 1 }, (_, i) => (
+                    <button key={i} onClick={() => handleDownload(b.backup_id, i + 1)} style={styles.cardBtn}>part{i + 1}</button>
+                  ))
+                ) : (
+                  <button onClick={() => handleDownload(b.backup_id)} style={styles.cardBtn}>Скачать</button>
+                )}
+                <button onClick={() => handleDelete(b.backup_id)} style={styles.cardDangerBtn}>Удалить</button>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <table style={styles.table}>
           <thead>
@@ -611,4 +765,16 @@ const styles = {
   empty: { textAlign: 'center', padding: '48px 16px' },
   row: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' },
   dropZone: { border: '2px dashed #d1d5db', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', background: '#f9fafb', transition: 'border-color 0.15s', marginTop: '8px' },
+  cards: { display: 'flex', flexDirection: 'column', gap: '12px' },
+  card: { background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '14px' },
+  inactiveCard: { backgroundColor: '#f9fafb', opacity: 0.7 },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+  cardTitle: { fontWeight: 700, fontSize: '15px', color: '#111827' },
+  cardBody: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' },
+  cardField: { fontSize: '14px', color: '#374151', lineHeight: '1.4', wordBreak: 'break-word' },
+  cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
+  cardActions: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center' },
+  cardBtn: { padding: '8px 14px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', flex: 1 },
+  cardDangerBtn: { padding: '8px 14px', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', flex: 1 },
+  cardSuccessBtn: { padding: '8px 14px', background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', flex: 1 },
 };

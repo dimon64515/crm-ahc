@@ -532,7 +532,9 @@ const styles = {
   requestBanner: { background: '#eff6ff', color: '#1e40af', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', border: '1px solid #bfdbfe' },
   form: { display: 'flex', flexDirection: 'column', gap: '20px' },
   row: { display: 'flex', gap: '16px', flexWrap: 'wrap' },
+  rowMobile: { display: 'flex', flexDirection: 'column', gap: '12px' },
   field: { display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '180px' },
+  fieldMobile: { display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' },
   label: { fontSize: '14px', fontWeight: 500, color: '#374151' },
   required: { color: '#dc2626' },
   input: {
