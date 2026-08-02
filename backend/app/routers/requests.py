@@ -163,7 +163,7 @@ def list_requests(
         joinedload(Request.creator),
         joinedload(Request.executor),
         selectinload(Request.photos),
-    )
+    ).filter(Request.deleted_at.is_(None))
     if status:
         query = query.filter(Request.status == status)
     if building_id:
@@ -198,7 +198,7 @@ def list_my_requests(
         joinedload(Request.creator),
         joinedload(Request.executor),
         selectinload(Request.photos),
-    ).filter(Request.created_by == current_user.id).order_by(Request.created_at.desc()).all()
+    ).filter(Request.created_by == current_user.id, Request.deleted_at.is_(None)).order_by(Request.created_at.desc()).all()
     return {
         "items": [build_request_list_item(r, db) for r in items],
         "total": len(items),
@@ -218,6 +218,9 @@ def get_request(
         selectinload(Request.photos),
     ).filter(Request.id == request_id).first()
     if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if req.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
     if current_user.role == "comendant" and req.created_by != current_user.id:
