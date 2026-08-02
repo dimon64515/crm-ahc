@@ -8,6 +8,7 @@ from app.database import engine, Base
 from app.routers import auth, users, buildings, services, materials, works, reports, backups
 from app.routers import requests as requests_router
 from app.routers import push as push_router
+from app.routers.admin import audit_logs
 
 settings = get_settings()
 
@@ -45,6 +46,7 @@ app.include_router(reports.router, prefix="/api")
 app.include_router(backups.router, prefix="/api")
 app.include_router(requests_router.router, prefix="/api")
 app.include_router(push_router.router, prefix="/api")
+app.include_router(audit_logs.router, prefix="/api")
 
 
 @app.get("/api/health")
