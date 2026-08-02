@@ -184,6 +184,7 @@ class Request(Base):
     extended_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True, index=True)
 
     building = relationship("Building")
     service = relationship("Service")
@@ -222,3 +223,19 @@ class PushSubscription(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'endpoint', name='uix_push_subscription_user_endpoint'),
     )
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    action = Column(String(50), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False, index=True)
+    entity_id = Column(Integer, nullable=True, index=True)
+    old_values = Column(JSON, nullable=True)
+    new_values = Column(JSON, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User", foreign_keys=[user_id])
