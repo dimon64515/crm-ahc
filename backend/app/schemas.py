@@ -376,6 +376,39 @@ class RequestUpdate(BaseModel):
         return v
 
 
+class AdminRequestUpdate(BaseModel):
+    """Расширенная схема обновления заявки для администратора."""
+    description: Optional[str] = Field(None, min_length=5)
+    building_id: Optional[int] = None
+    service_id: Optional[int] = None
+    assigned_to: Optional[int] = None
+    status: Optional[str] = Field(None, pattern="^(new|in_progress|completed)$")
+    due_date: Optional[str] = None  # YYYY-MM-DD format
+
+    @field_validator('description')
+    @classmethod
+    def description_not_empty(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError('Описание не может быть пустым')
+        return v
+
+    @field_validator('due_date')
+    @classmethod
+    def validate_due_date(cls, v):
+        if v is not None:
+            try:
+                date.fromisoformat(v)
+            except ValueError:
+                raise ValueError('Неверный формат даты, ожидается YYYY-MM-DD')
+        return v
+
+
+class RequestDeleteResponse(BaseModel):
+    """Ответ при удалении заявки."""
+    success: bool = True
+    deleted_at: datetime
+
+
 class RequestResponse(BaseModel):
     id: int
     building: BuildingResponse
@@ -433,3 +466,26 @@ class PushSubscriptionResponse(BaseModel):
 
 class PushSubscriptionUnsubscribe(BaseModel):
     endpoint: str = Field(..., min_length=1, max_length=500)
+
+
+# === Audit Log Schemas ===
+
+class AuditLogResponse(BaseModel):
+    id: int
+    action: str
+    entity_type: str
+    entity_id: Optional[int]
+    old_values: Optional[dict]
+    new_values: Optional[dict]
+    user: UserResponse
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditLogsListResponse(BaseModel):
+    items: List[AuditLogResponse]
+    total: int
+    page: int
+    per_page: int
