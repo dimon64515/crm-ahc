@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
 from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService, AuditLog
-from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate, RequestDeleteResponse
+from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate, AdminRequestUpdate, RequestDeleteResponse
 from app.core.dependencies import get_current_user, require_comendant, require_executor, require_director, require_admin
 from app.core.config import get_settings
 from app.services.file_service import compress_image, get_file_url
@@ -233,6 +233,7 @@ def update_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_director)
 ):
+    """Базовое обновление заявки для director/admin."""
     req = db.query(Request).options(
         joinedload(Request.building),
         joinedload(Request.creator),
@@ -242,8 +243,14 @@ def update_request(
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    if req.status == "completed":
+    if req.deleted_at is not None:
+        raise HTTPException(status_code=400, detail="Нельзя редактировать удалённую заявку")
+
+    if req.status == "completed" and current_user.role != "admin":
         raise HTTPException(status_code=400, detail="Нельзя редактировать завершённую заявку")
+
+    old_values = {}
+    new_values = {}
 
     update_fields = data.model_dump(exclude_unset=True)
 
@@ -251,28 +258,127 @@ def update_request(
         building = db.query(Building).filter(Building.id == data.building_id, Building.is_active == True).first()
         if not building:
             raise HTTPException(status_code=400, detail="Корпус не найден или неактивен")
+        old_values['building_id'] = req.building_id
         req.building_id = data.building_id
+        new_values['building_id'] = data.building_id
 
     if data.description is not None:
+        old_values['description'] = req.description
         req.description = data.description.strip()
+        new_values['description'] = req.description
 
     if 'service_id' in update_fields:
         if data.service_id is not None:
             service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
             if not service:
                 raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
+        old_values['service_id'] = req.service_id
         req.service_id = data.service_id
+        new_values['service_id'] = data.service_id
 
     if 'assigned_to' in update_fields:
         if data.assigned_to is not None:
             executor = db.query(User).filter(User.id == data.assigned_to, User.is_active == True).first()
             if not executor or executor.role not in ("contractor", "director", "admin"):
                 raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
+        old_values['assigned_to'] = req.assigned_to
         req.assigned_to = data.assigned_to
+        new_values['assigned_to'] = data.assigned_to
+
+    if old_values:
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action="updated",
+            entity_type="request",
+            entity_id=req.id,
+            old_values=old_values,
+            new_values=new_values,
+        )
 
     db.commit()
     db.refresh(req)
-    return build_request_response(req)
+    return build_request_response(req, db)
+
+
+@router.put("/{request_id}/admin", response_model=RequestResponse)
+def update_request_admin(
+    request_id: int,
+    data: AdminRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Расширенное обновление заявки для администратора."""
+    req = db.query(Request).options(
+        joinedload(Request.building),
+        joinedload(Request.creator),
+        joinedload(Request.executor),
+        selectinload(Request.photos),
+    ).filter(Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if req.deleted_at is not None:
+        raise HTTPException(status_code=400, detail="Нельзя редактировать удалённую заявку")
+
+    old_values = {}
+    new_values = {}
+
+    update_fields = data.model_dump(exclude_unset=True)
+
+    if data.building_id is not None:
+        building = db.query(Building).filter(Building.id == data.building_id, Building.is_active == True).first()
+        if not building:
+            raise HTTPException(status_code=400, detail="Корпус не найден или неактивен")
+        old_values['building_id'] = req.building_id
+        req.building_id = data.building_id
+        new_values['building_id'] = data.building_id
+
+    if data.service_id is not None:
+        service = db.query(Service).filter(Service.id == data.service_id, Service.is_active == True).first()
+        if not service:
+            raise HTTPException(status_code=400, detail="Вид работы не найден или неактивен")
+        old_values['service_id'] = req.service_id
+        req.service_id = data.service_id
+        new_values['service_id'] = data.service_id
+
+    if data.description is not None:
+        old_values['description'] = req.description
+        req.description = data.description.strip()
+        new_values['description'] = req.description
+
+    if data.assigned_to is not None:
+        executor = db.query(User).filter(User.id == data.assigned_to, User.is_active == True).first()
+        if not executor or executor.role not in ("contractor", "director", "admin"):
+            raise HTTPException(status_code=400, detail="Исполнитель не найден или неактивен")
+        old_values['assigned_to'] = req.assigned_to
+        req.assigned_to = data.assigned_to
+        new_values['assigned_to'] = data.assigned_to
+
+    if data.status is not None:
+        old_values['status'] = req.status
+        req.status = data.status
+        new_values['status'] = data.status
+
+    if data.due_date is not None:
+        old_values['due_date'] = req.due_date.isoformat() if req.due_date else None
+        req.due_date = date.fromisoformat(data.due_date)
+        new_values['due_date'] = data.due_date
+
+    if old_values:
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action="updated",
+            entity_type="request",
+            entity_id=req.id,
+            old_values=old_values,
+            new_values=new_values,
+        )
+
+    db.commit()
+    db.refresh(req)
+    return build_request_response(req, db)
 
 
 @router.post("/{request_id}/photos")
