@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Select from 'react-select';
 import { requestsAPI, usersAPI, buildingsAPI, servicesAPI, getUploadUrl } from '../api';
+import AdminRequestForm from '../components/AdminRequestForm';
 
 const STATUS_LABELS = {
   new: 'Новая',
@@ -57,6 +58,8 @@ export default function RequestDetailPage() {
   const [editedDescription, setEditedDescription] = useState('');
   const [editedBuildingId, setEditedBuildingId] = useState('');
   const [editedServiceId, setEditedServiceId] = useState('');
+  const [isAdminEditing, setIsAdminEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -191,6 +194,18 @@ export default function RequestDetailPage() {
     }
   };
 
+  const handleDeleteRequest = async () => {
+    if (!confirm('Вы уверены, что хотите удалить эту заявку?')) return;
+    try {
+      await requestsAPI.delete(id);
+      navigate(backPath);
+    } catch (e) {
+      console.error('Failed to delete request:', e);
+      const detail = e.response?.data?.detail || 'Ошибка при удалении';
+      showMessage(detail, true);
+    }
+  };
+
   if (!user) return null;
 
   const isExecutor = user.role === 'contractor' || user.role === 'director' || user.role === 'admin';
@@ -205,7 +220,7 @@ export default function RequestDetailPage() {
   );
   const canExtend = isAdmin && req?.status !== 'completed';
   const canEdit = isDirector && req?.status !== 'completed';
-  const canCreateWork = req && req.status !== 'completed' && ['contractor', 'director', 'admin'].includes(user.role) && (user.role !== 'contractor' || req.assigned_to === user.id || req.assigned_to === null);
+  const canCreateWork = req && req.status !== 'completed' && ['contractor', 'director', 'admin'].includes(user.role) && (user.role !== 'contractor' || req.executor?.id === user.id || !req.executor?.id);
 
   const backPath = isComendant ? '/my-requests' : '/requests';
 
@@ -215,6 +230,39 @@ export default function RequestDetailPage() {
         <h1 style={styles.title}>Заявка #{id}</h1>
         <button onClick={() => navigate(backPath)} style={styles.backBtn}>← Назад</button>
       </div>
+
+      {isAdmin && (
+        <div style={styles.adminControls}>
+          <button
+            onClick={() => setIsAdminEditing(!isAdminEditing)}
+            style={styles.adminEditBtn}
+          >
+            {isAdminEditing ? 'Отменить редактирование' : 'Редактировать (админ)'}
+          </button>
+          <button
+            onClick={handleDeleteRequest}
+            style={styles.adminDeleteBtn}
+          >
+            Удалить заявку
+          </button>
+        </div>
+      )}
+
+      {isAdminEditing && req && (
+        <div style={styles.adminEditCard}>
+          <AdminRequestForm
+            request={req}
+            buildings={buildings}
+            services={services}
+            users={users}
+            onSave={async () => {
+              setIsAdminEditing(false);
+              await loadRequest();
+            }}
+            onCancel={() => setIsAdminEditing(false)}
+          />
+        </div>
+      )}
 
       {message && (
         <div style={message.isError ? styles.errorMessage : styles.successMessage}>
@@ -435,6 +483,10 @@ const styles = {
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' },
   title: { fontSize: '22px', fontWeight: 700, margin: 0 },
   backBtn: { padding: '8px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' },
+  adminControls: { display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' },
+  adminEditBtn: { padding: '10px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
+  adminDeleteBtn: { padding: '10px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
+  adminEditCard: { background: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' },
   card: { background: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' },
   row: { display: 'flex', flexDirection: 'column', gap: '4px' },
   label: { fontSize: '13px', color: '#6b7280', fontWeight: 500 },
