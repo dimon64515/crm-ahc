@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Optional
 from app.models import AuditLog
 
@@ -16,6 +16,8 @@ def serialize_for_log(obj: Any) -> Any:
         for column in obj.__table__.columns:
             value = getattr(obj, column.name)
             if isinstance(value, datetime):
+                value = value.isoformat()
+            elif isinstance(value, date):
                 value = value.isoformat()
             result[column.name] = value
         return result
