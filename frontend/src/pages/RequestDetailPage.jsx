@@ -194,6 +194,38 @@ export default function RequestDetailPage() {
     }
   };
 
+  const handleSaveAndComplete = async () => {
+    setActionLoading(true);
+    setError('');
+    try {
+      const payload = {};
+      if (editedDescription.trim() !== (req.description || '')) {
+        payload.description = editedDescription.trim();
+      }
+      if (editedBuildingId && parseInt(editedBuildingId, 10) !== req.building?.id) {
+        payload.building_id = parseInt(editedBuildingId, 10);
+      }
+      if (editedServiceId && parseInt(editedServiceId, 10) !== req.service?.id) {
+        payload.service_id = parseInt(editedServiceId, 10);
+      }
+      
+      if (Object.keys(payload).length > 0) {
+        await requestsAPI.update(id, payload);
+      }
+      
+      await requestsAPI.complete(id);
+      
+      showMessage('Заявка обновлена и завершена');
+      setEditMode(false);
+      await loadRequest();
+    } catch (e) {
+      const detail = e.response?.data?.detail || 'Ошибка выполнения действия';
+      showMessage(detail, true);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleDeleteRequest = async () => {
     if (!confirm('Вы уверены, что хотите удалить эту заявку?')) return;
     try {
@@ -290,6 +322,9 @@ export default function RequestDetailPage() {
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditMode(false); setEditedDescription(req.description || ''); setEditedBuildingId(req.building?.id || ''); }} style={styles.secondaryBtn}>Отмена</button>
                     <button onClick={handleUpdate} disabled={actionLoading} style={styles.primaryBtn}>{actionLoading ? '…' : 'Сохранить'}</button>
+                    {canComplete && (
+                      <button onClick={handleSaveAndComplete} disabled={actionLoading} style={styles.successBtn}>{actionLoading ? '…' : 'Завершить и сохранить'}</button>
+                    )}
                   </div>
                 )}
               </div>
