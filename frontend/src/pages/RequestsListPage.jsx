@@ -34,10 +34,7 @@ function downloadZip(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
-function RequestActions({ req, actionId, canTake, canAssign, canPrint, canExtendReq, canOpenReport, isContractor, onAction, onAssign, onPrintOne, loadRequests }) {
-  const canCreateReport = canOpenReport && (!isContractor || !req.has_work);
-  const reportLabel = req.has_work ? 'Изменить отчёт' : 'Создать отчёт';
-
+function RequestActions({ req, actionId, canTake, canAssign, canPrint, canExtendReq, onAction, onAssign, onPrintOne, loadRequests }) {
   return (
     <div style={styles.actionsGroup}>
       {req.status === 'new' && canTake && (
@@ -57,14 +54,6 @@ function RequestActions({ req, actionId, canTake, canAssign, canPrint, canExtend
         >
           {actionId === req.id ? '…' : 'Назначить'}
         </button>
-      )}
-      {req.status !== 'completed' && canCreateReport && (
-        <Link
-          to={`/works/new?request_id=${req.id}`}
-          style={{ ...styles.actionBtn, display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
-        >
-          {reportLabel}
-        </Link>
       )}
       {canPrint && (
         <button
@@ -292,13 +281,6 @@ export default function RequestsListPage() {
     }
   };
 
-  const canOpenReport = (req) => {
-    if (req.status === 'completed') return false;
-    if (user?.role === 'director' || user?.role === 'admin') return true;
-    if (user?.role === 'contractor' && req.executor?.id === user.id) return true;
-    return false;
-  };
-
   const formatDate = (d) => {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('ru-RU');
@@ -488,8 +470,6 @@ export default function RequestsListPage() {
                   canAssign={canAssign}
                   canPrint={canPrint}
                   canExtendReq={canExtend(req)}
-                  canOpenReport={canOpenReport(req)}
-                  isContractor={isContractor}
                   onAction={handleAction}
                   onAssign={handleAssign}
                   onPrintOne={downloadZip}
@@ -561,8 +541,6 @@ export default function RequestsListPage() {
                         canAssign={canAssign}
                         canPrint={canPrint}
                         canExtendReq={canExtend(req)}
-                        canOpenReport={canOpenReport(req)}
-                        isContractor={isContractor}
                         onAction={handleAction}
                         onAssign={handleAssign}
                         onPrintOne={downloadZip}
