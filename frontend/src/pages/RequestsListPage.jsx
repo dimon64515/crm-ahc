@@ -108,7 +108,14 @@ export default function RequestsListPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const isContractor = user?.role === 'contractor';
-  const [filters, setFilters] = useState({ status: 'new', building_id: '' });
+  const [filters, setFilters] = useState({
+    status: 'new',
+    building_id: '',
+    created_from: '',
+    created_to: '',
+    completed_from: '',
+    completed_to: '',
+  });
   const [buildings, setBuildings] = useState([]);
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
@@ -116,7 +123,7 @@ export default function RequestsListPage() {
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
-  const canPrint = user?.role === 'director' || user?.role === 'admin' || user?.role === 'contractor';
+  const canPrint = user?.role === 'director' || user?.role === 'admin';
   const canExtend = (req) => user?.role === 'admin' && req.status !== 'completed';
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -154,6 +161,10 @@ export default function RequestsListPage() {
       const params = {};
       if (filters.status) params.status = filters.status;
       if (filters.building_id) params.building_id = filters.building_id;
+      if (filters.created_from) params.created_from = filters.created_from;
+      if (filters.created_to) params.created_to = filters.created_to;
+      if (filters.completed_from) params.completed_from = filters.completed_from;
+      if (filters.completed_to) params.completed_to = filters.completed_to;
       const res = await requestsAPI.list(params);
       let items = res.data.items || [];
 
@@ -169,7 +180,7 @@ export default function RequestsListPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.building_id, isContractor, user]);
+  }, [filters, isContractor, user]);
 
   useEffect(() => {
     loadBuildings();
@@ -185,7 +196,7 @@ export default function RequestsListPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [items.length]);
+  }, [filters]);
 
   const handleAction = async (action, id) => {
     setActionId(id);
@@ -259,6 +270,14 @@ export default function RequestsListPage() {
     }
   };
 
+  const selectAllByFilter = () => {
+    if (selectedIds.length === items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((r) => r.id));
+    }
+  };
+
   const handlePrint = async () => {
     if (selectedIds.length === 0) return;
     try {
@@ -321,17 +340,30 @@ export default function RequestsListPage() {
       <div style={styles.header}>
         <h1 style={styles.title}>Заявки</h1>
         {canPrint && (
-          <button
-            onClick={handlePrint}
-            disabled={selectedIds.length === 0}
-            style={{
-              ...styles.printBtn,
-              opacity: selectedIds.length === 0 ? 0.5 : 1,
-              cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
-            }}
-          >
-            🖨 Печать ({selectedIds.length})
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={selectAllByFilter}
+              disabled={items.length === 0}
+              style={{
+                ...styles.secondaryBtn,
+                opacity: items.length === 0 ? 0.5 : 1,
+                cursor: items.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {selectedIds.length === items.length && items.length > 0 ? 'Снять выбор' : 'Выбрать все по фильтру'}
+            </button>
+            <button
+              onClick={handlePrint}
+              disabled={selectedIds.length === 0}
+              style={{
+                ...styles.printBtn,
+                opacity: selectedIds.length === 0 ? 0.5 : 1,
+                cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              🖨 Печать ({selectedIds.length})
+            </button>
+          </div>
         )}
       </div>
 
@@ -367,6 +399,38 @@ export default function RequestsListPage() {
             <option key={b.id} value={b.id}>{b.number} — {b.name}</option>
           ))}
         </select>
+        {canPrint && (
+          <>
+            <input
+              type="date"
+              placeholder="Создана с"
+              value={filters.created_from}
+              onChange={(e) => setFilters({ ...filters, created_from: e.target.value })}
+              style={styles.filterInput}
+            />
+            <input
+              type="date"
+              placeholder="Создана по"
+              value={filters.created_to}
+              onChange={(e) => setFilters({ ...filters, created_to: e.target.value })}
+              style={styles.filterInput}
+            />
+            <input
+              type="date"
+              placeholder="Завершена с"
+              value={filters.completed_from}
+              onChange={(e) => setFilters({ ...filters, completed_from: e.target.value })}
+              style={styles.filterInput}
+            />
+            <input
+              type="date"
+              placeholder="Завершена по"
+              value={filters.completed_to}
+              onChange={(e) => setFilters({ ...filters, completed_to: e.target.value })}
+              style={styles.filterInput}
+            />
+          </>
+        )}
       </div>
 
       {error && <div style={styles.error}>{error}</div>}
