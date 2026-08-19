@@ -184,6 +184,7 @@ class Request(Base):
     extended_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
     deleted_at = Column(DateTime, nullable=True, index=True)
 
     building = relationship("Building")

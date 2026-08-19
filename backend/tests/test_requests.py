@@ -847,3 +847,58 @@ def test_director_can_clear_service_and_executor():
     assert data["service"] is None
     assert data["executor"] is None
     db.close()
+
+
+def test_list_requests_filter_by_created_and_completed_dates():
+    db = TestingSessionLocal()
+    # Очищаем заявки от предыдущих тестов, чтобы фильтр по дате возвращал строго тестовые данные
+    db.query(Request).delete(synchronize_session=False)
+    db.commit()
+
+    director = User(username="director_dates", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    comendant = User(username="comendant_dates", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="20", name="Корпус 20", is_active=True)
+    db.add_all([director, comendant, building])
+    db.commit()
+
+    today = datetime.utcnow().date()
+    req_old = Request(
+        building_id=building.id, description="Старая", status="completed", created_by=comendant.id,
+        created_at=datetime.combine(today - timedelta(days=10), datetime.min.time()),
+        completed_at=datetime.combine(today - timedelta(days=5), datetime.min.time()),
+        due_date=today + timedelta(days=5), extended_count=0,
+    )
+    req_new = Request(
+        building_id=building.id, description="Новая", status="new", created_by=comendant.id,
+        created_at=datetime.combine(today, datetime.min.time()),
+        due_date=today + timedelta(days=5), extended_count=0,
+    )
+    db.add_all([req_old, req_new])
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "director_dates", "password": "pass"})
+    token = login.json()["access_token"]
+
+    # Фильтр по дате создания — должна остаться только новая
+    response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"created_from": today.isoformat(), "created_to": today.isoformat()},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["description"] == "Новая"
+
+    # Фильтр по дате завершения — должна остаться только старая
+    response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"completed_from": (today - timedelta(days=5)).isoformat(), "completed_to": (today - timedelta(days=5)).isoformat()},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["description"] == "Старая"
+
+    db.close()
