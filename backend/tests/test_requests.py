@@ -11,9 +11,16 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
-from app.models import User, Building, Request, PushSubscription, Service, Work
+from app.models import User, Building, Request, PushSubscription, Service, Work, WorkPhoto, WorkService
 from app.core.security import get_password_hash
 import app.routers.requests as requests_module
+
+
+def make_jpeg_bytes() -> bytes:
+    img = Image.new("RGB", (10, 10), color="red")
+    buf = BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_requests.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -182,12 +189,30 @@ def test_contractor_can_complete_own_request():
     db.add_all([comendant, contractor, building, service])
     db.commit()
     db.refresh(service)
+    db.refresh(building)
+    db.refresh(contractor)
 
     req = Request(building_id=building.id, description="Завершить", status="in_progress", created_by=comendant.id,
                   assigned_to=contractor.id, service_id=service.id, due_date=date.today() + timedelta(days=5), extended_count=0)
     db.add(req)
     db.commit()
     db.refresh(req)
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        request_id=req.id,
+        work_date=date.today(),
+        description=req.description,
+        materials_total_price=Decimal("0"),
+        total_price=service.price,
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+    db.add(WorkService(work_id=work.id, service_id=service.id, quantity=Decimal("1"), unit_price=service.price, total_price=service.price))
+    db.add(WorkPhoto(work_id=work.id, filename="test.jpg", original_name="test.jpg", file_path="/tmp/test.jpg", file_size=100, mime_type="image/jpeg"))
+    db.commit()
 
     login = client.post("/api/auth/login", json={"username": "contractor_complete", "password": "pass"})
     token = login.json()["access_token"]
@@ -609,7 +634,7 @@ def test_complete_request_without_service_returns_400():
     db.close()
 
 
-def test_complete_request_creates_work():
+def test_complete_request_creates_work_and_rejects_without_photos():
     db = TestingSessionLocal()
     comendant = User(username="comendant_complete_work", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
     contractor = User(username="contractor_complete_work", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
@@ -632,20 +657,58 @@ def test_complete_request_creates_work():
         f"/api/requests/{req.id}/complete",
         headers={"Authorization": f"Bearer {token}"},
     )
+    # Отчёт без фото не принимается
+    assert response.status_code == 400, response.text
+    assert "фото" in response.json()["detail"].lower()
+
+    db.close()
+
+
+def test_complete_request_with_existing_work_and_photos():
+    db = TestingSessionLocal()
+    comendant = User(username="comendant_complete_photos", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    contractor = User(username="contractor_complete_photos", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="62_photos", name="Корпус 62 фото", is_active=True)
+    service = Service(name="Замена лампочки", unit="шт", price=Decimal("250.00"), is_active=True)
+    db.add_all([comendant, contractor, building, service])
+    db.commit()
+    db.refresh(service)
+    db.refresh(building)
+    db.refresh(contractor)
+
+    req = Request(building_id=building.id, description="Заменить лампочку", status="in_progress", created_by=comendant.id,
+                  assigned_to=contractor.id, service_id=service.id, due_date=date.today() + timedelta(days=5), extended_count=0)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        request_id=req.id,
+        work_date=date.today(),
+        description=req.description,
+        materials_total_price=Decimal("0"),
+        total_price=service.price,
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+
+    db.add(WorkService(work_id=work.id, service_id=service.id, quantity=Decimal("1"), unit_price=service.price, total_price=service.price))
+    db.add(WorkPhoto(work_id=work.id, filename="test.jpg", original_name="test.jpg", file_path="/tmp/test.jpg", file_size=100, mime_type="image/jpeg"))
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "contractor_complete_photos", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/complete",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["status"] == "completed"
-
-    work = db.query(Work).filter(Work.request_id == req.id).first()
-    assert work is not None
-    assert work.user_id == contractor.id
-    assert work.building_id == building.id
-    assert len(work.work_services) == 1
-    assert work.work_services[0].service_id == service.id
-    assert work.work_services[0].quantity == 1
-    assert work.work_services[0].unit_price == service.price
-    assert work.total_price == service.price
-    assert work.description == req.description
     db.close()
 
 def test_list_requests_default_sorting():
@@ -912,6 +975,8 @@ def test_complete_request_populates_completed_at_and_appears_in_date_filter():
     db.add_all([director, contractor, comendant, building, service])
     db.commit()
     db.refresh(service)
+    db.refresh(building)
+    db.refresh(contractor)
 
     req = Request(
         building_id=building.id, description="Завершить и проверить фильтр", status="in_progress",
@@ -921,6 +986,22 @@ def test_complete_request_populates_completed_at_and_appears_in_date_filter():
     db.add(req)
     db.commit()
     db.refresh(req)
+
+    work = Work(
+        user_id=contractor.id,
+        building_id=building.id,
+        request_id=req.id,
+        work_date=date.today(),
+        description=req.description,
+        materials_total_price=Decimal("0"),
+        total_price=service.price,
+    )
+    db.add(work)
+    db.commit()
+    db.refresh(work)
+    db.add(WorkService(work_id=work.id, service_id=service.id, quantity=Decimal("1"), unit_price=service.price, total_price=service.price))
+    db.add(WorkPhoto(work_id=work.id, filename="test.jpg", original_name="test.jpg", file_path="/tmp/test.jpg", file_size=100, mime_type="image/jpeg"))
+    db.commit()
 
     login_contractor = client.post("/api/auth/login", json={"username": "contractor_complete_filter", "password": "pass"})
     token_contractor = login_contractor.json()["access_token"]
@@ -949,4 +1030,88 @@ def test_complete_request_populates_completed_at_and_appears_in_date_filter():
     assert len(matching) == 1
     assert matching[0]["completed_at"] is not None
 
+    db.close()
+
+
+def test_list_requests_filter_by_status_and_created_dates():
+    db = TestingSessionLocal()
+    director = User(
+        username="director_status_dates",
+        hashed_password=get_password_hash("pass"),
+        role="director",
+        is_active=True,
+    )
+    comendant = User(
+        username="comendant_status_dates",
+        hashed_password=get_password_hash("pass"),
+        role="comendant",
+        is_active=True,
+    )
+    building = Building(number="status_dates_bldg", name="Корпус статус+даты", is_active=True)
+    db.add_all([director, comendant, building])
+    db.commit()
+
+    today = datetime.utcnow().date()
+    new_req = Request(
+        building_id=building.id,
+        description="Новая сегодня",
+        status="new",
+        created_by=comendant.id,
+        created_at=datetime.combine(today, datetime.min.time()),
+        due_date=today + timedelta(days=5),
+        extended_count=0,
+    )
+    completed_req = Request(
+        building_id=building.id,
+        description="Завершённая вчера",
+        status="completed",
+        created_by=comendant.id,
+        created_at=datetime.combine(today - timedelta(days=1), datetime.min.time()),
+        completed_at=datetime.combine(today - timedelta(days=1), datetime.max.time()),
+        due_date=today + timedelta(days=5),
+        extended_count=0,
+    )
+    db.add_all([new_req, completed_req])
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "director_status_dates", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token}"},
+        params={
+            "status": "new",
+            "building_id": building.id,
+            "created_from": today.isoformat(),
+            "created_to": today.isoformat(),
+        },
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["description"] == "Новая сегодня"
+    db.close()
+
+
+def test_list_requests_invalid_date_returns_422():
+    db = TestingSessionLocal()
+    director = User(
+        username="director_invalid_date",
+        hashed_password=get_password_hash("pass"),
+        role="director",
+        is_active=True,
+    )
+    db.add(director)
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "director_invalid_date", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"created_from": "not-a-date"},
+    )
+    assert response.status_code == 422, response.text
     db.close()

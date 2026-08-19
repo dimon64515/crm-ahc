@@ -158,10 +158,10 @@ def list_requests(
     building_id: int = None,
     date_from: str = None,
     date_to: str = None,
-    created_from: str = None,
-    created_to: str = None,
-    completed_from: str = None,
-    completed_to: str = None,
+    created_from: date = None,
+    created_to: date = None,
+    completed_from: date = None,
+    completed_to: date = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_executor)
 ):
@@ -188,29 +188,13 @@ def list_requests(
             raise HTTPException(status_code=400, detail="Неверный формат date_to, ожидается YYYY-MM-DD")
         query = query.filter(Request.created_at <= datetime.combine(date_to_parsed, datetime.max.time()))
     if created_from:
-        try:
-            created_from_parsed = datetime.strptime(created_from, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Неверный формат created_from, ожидается YYYY-MM-DD")
-        query = query.filter(Request.created_at >= datetime.combine(created_from_parsed, datetime.min.time()))
+        query = query.filter(Request.created_at >= datetime.combine(created_from, datetime.min.time()))
     if created_to:
-        try:
-            created_to_parsed = datetime.strptime(created_to, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Неверный формат created_to, ожидается YYYY-MM-DD")
-        query = query.filter(Request.created_at <= datetime.combine(created_to_parsed, datetime.max.time()))
+        query = query.filter(Request.created_at <= datetime.combine(created_to, datetime.max.time()))
     if completed_from:
-        try:
-            completed_from_parsed = datetime.strptime(completed_from, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Неверный формат completed_from, ожидается YYYY-MM-DD")
-        query = query.filter(Request.completed_at >= datetime.combine(completed_from_parsed, datetime.min.time()))
+        query = query.filter(Request.completed_at >= datetime.combine(completed_from, datetime.min.time()))
     if completed_to:
-        try:
-            completed_to_parsed = datetime.strptime(completed_to, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Неверный формат completed_to, ожидается YYYY-MM-DD")
-        query = query.filter(Request.completed_at <= datetime.combine(completed_to_parsed, datetime.max.time()))
+        query = query.filter(Request.completed_at <= datetime.combine(completed_to, datetime.max.time()))
 
     items = query.order_by(Request.assigned_to.asc().nullsfirst(), Request.created_at.desc()).all()
     return {
@@ -543,6 +527,8 @@ def complete_request(
         raise HTTPException(status_code=400, detail="Описание работы обязательно")
     if len(existing_work.work_services) == 0:
         raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одна услуга в отчете")
+    if len(existing_work.photos) == 0:
+        raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одно фото в отчете")
 
     if current_user.role == "contractor" and req.assigned_to != current_user.id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")

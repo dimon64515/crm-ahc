@@ -123,7 +123,8 @@ export default function RequestsListPage() {
 
   const canTake = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
   const canAssign = user?.role === 'director' || user?.role === 'admin';
-  const canPrint = user?.role === 'director' || user?.role === 'admin';
+  const canPrint = user?.role === 'contractor' || user?.role === 'director' || user?.role === 'admin';
+  const canFilterByPeriod = user?.role === 'director' || user?.role === 'admin';
   const canExtend = (req) => user?.role === 'admin' && req.status !== 'completed';
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -341,17 +342,19 @@ export default function RequestsListPage() {
         <h1 style={styles.title}>Заявки</h1>
         {canPrint && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              onClick={selectAllByFilter}
-              disabled={items.length === 0}
-              style={{
-                ...styles.secondaryBtn,
-                opacity: items.length === 0 ? 0.5 : 1,
-                cursor: items.length === 0 ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {selectedIds.length === items.length && items.length > 0 ? 'Снять выбор' : 'Выбрать все по фильтру'}
-            </button>
+            {canFilterByPeriod && (
+              <button
+                onClick={selectAllByFilter}
+                disabled={items.length === 0}
+                style={{
+                  ...styles.secondaryBtn,
+                  opacity: items.length === 0 ? 0.5 : 1,
+                  cursor: items.length === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {selectedIds.length === items.length && items.length > 0 ? 'Снять выбор' : 'Выбрать все по фильтру'}
+              </button>
+            )}
             <button
               onClick={handlePrint}
               disabled={selectedIds.length === 0}
@@ -399,7 +402,7 @@ export default function RequestsListPage() {
             <option key={b.id} value={b.id}>{b.number} — {b.name}</option>
           ))}
         </select>
-        {canPrint && (
+        {canFilterByPeriod && (
           <>
             <input
               type="date"
