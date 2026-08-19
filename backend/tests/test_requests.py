@@ -27,13 +27,6 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def make_jpeg_bytes() -> bytes:
-    img = Image.new("RGB", (10, 10), color="red")
-    buf = BytesIO()
-    img.save(buf, format="JPEG")
-    return buf.getvalue()
-
-
 def override_get_db():
     db = TestingSessionLocal()
     try:
@@ -634,7 +627,7 @@ def test_complete_request_without_service_returns_400():
     db.close()
 
 
-def test_complete_request_creates_work_and_rejects_without_photos():
+def test_complete_request_creates_work_without_photos():
     db = TestingSessionLocal()
     comendant = User(username="comendant_complete_work", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
     contractor = User(username="contractor_complete_work", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
@@ -657,9 +650,9 @@ def test_complete_request_creates_work_and_rejects_without_photos():
         f"/api/requests/{req.id}/complete",
         headers={"Authorization": f"Bearer {token}"},
     )
-    # Отчёт без фото не принимается
-    assert response.status_code == 400, response.text
-    assert "фото" in response.json()["detail"].lower()
+    # Фото больше не требуется для завершения заявки
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
 
     db.close()
 

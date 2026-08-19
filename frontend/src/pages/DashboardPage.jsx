@@ -596,34 +596,38 @@ function RequestsDashboard() {
           <option value="">Все корпуса</option>
           {buildings.map(b => <option key={b.id} value={b.id}>{b.number} — {b.name}</option>)}
         </select>
-        <input
-          type="date"
-          placeholder="Создана с"
-          value={filterCreatedFrom}
-          onChange={(e) => setFilterCreatedFrom(e.target.value)}
-          style={styles.filterInput}
-        />
-        <input
-          type="date"
-          placeholder="Создана по"
-          value={filterCreatedTo}
-          onChange={(e) => setFilterCreatedTo(e.target.value)}
-          style={styles.filterInput}
-        />
-        <input
-          type="date"
-          placeholder="Завершена с"
-          value={filterCompletedFrom}
-          onChange={(e) => setFilterCompletedFrom(e.target.value)}
-          style={styles.filterInput}
-        />
-        <input
-          type="date"
-          placeholder="Завершена по"
-          value={filterCompletedTo}
-          onChange={(e) => setFilterCompletedTo(e.target.value)}
-          style={styles.filterInput}
-        />
+        {canPrint && (
+          <>
+            <input
+              type="date"
+              placeholder="Создана с"
+              value={filterCreatedFrom}
+              onChange={(e) => setFilterCreatedFrom(e.target.value)}
+              style={styles.filterInput}
+            />
+            <input
+              type="date"
+              placeholder="Создана по"
+              value={filterCreatedTo}
+              onChange={(e) => setFilterCreatedTo(e.target.value)}
+              style={styles.filterInput}
+            />
+            <input
+              type="date"
+              placeholder="Завершена с"
+              value={filterCompletedFrom}
+              onChange={(e) => setFilterCompletedFrom(e.target.value)}
+              style={styles.filterInput}
+            />
+            <input
+              type="date"
+              placeholder="Завершена по"
+              value={filterCompletedTo}
+              onChange={(e) => setFilterCompletedTo(e.target.value)}
+              style={styles.filterInput}
+            />
+          </>
+        )}
         {canPrint && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button

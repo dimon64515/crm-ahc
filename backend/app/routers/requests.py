@@ -527,11 +527,6 @@ def complete_request(
         raise HTTPException(status_code=400, detail="Описание работы обязательно")
     if len(existing_work.work_services) == 0:
         raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одна услуга в отчете")
-    if len(existing_work.photos) == 0:
-        raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одно фото в отчете")
-
-    if current_user.role == "contractor" and req.assigned_to != current_user.id:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
 
     req.status = "completed"
     req.completed_at = datetime.utcnow()
