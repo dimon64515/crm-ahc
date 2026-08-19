@@ -652,7 +652,19 @@ def test_complete_request_creates_work_without_photos():
     )
     # Фото больше не требуется для завершения заявки
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "completed"
+    data = response.json()
+    assert data["status"] == "completed"
+
+    work = db.query(Work).filter(Work.request_id == req.id).first()
+    assert work is not None
+    assert work.user_id == contractor.id
+    assert work.building_id == building.id
+    assert len(work.work_services) == 1
+    assert work.work_services[0].service_id == service.id
+    assert work.work_services[0].quantity == 1
+    assert work.work_services[0].unit_price == service.price
+    assert work.total_price == service.price
+    assert work.description == req.description
 
     db.close()
 
