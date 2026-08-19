@@ -422,6 +422,7 @@ class RequestResponse(BaseModel):
     photos: List[RequestPhotoResponse]
     created_at: datetime
     updated_at: datetime
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -439,6 +440,7 @@ class RequestListItem(BaseModel):
     extended_count: int
     photos_count: int
     created_at: datetime
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

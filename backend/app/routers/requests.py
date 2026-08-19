@@ -69,6 +69,7 @@ def build_request_response(req: Request, db: Session = None) -> dict:
         ],
         "created_at": req.created_at,
         "updated_at": req.updated_at,
+        "completed_at": req.completed_at,
         "has_work": has_work,
     }
 
@@ -90,6 +91,7 @@ def build_request_list_item(req: Request, db: Session = None) -> dict:
         "extended_count": req.extended_count,
         "photos_count": len(req.photos),
         "created_at": req.created_at,
+        "completed_at": req.completed_at,
         "has_work": has_work,
     }
 

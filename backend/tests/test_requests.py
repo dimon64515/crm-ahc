@@ -851,13 +851,11 @@ def test_director_can_clear_service_and_executor():
 
 def test_list_requests_filter_by_created_and_completed_dates():
     db = TestingSessionLocal()
-    # Очищаем заявки от предыдущих тестов, чтобы фильтр по дате возвращал строго тестовые данные
-    db.query(Request).delete(synchronize_session=False)
-    db.commit()
-
+    # Изоляция через уникальный корпус и фильтр по building_id: предыдущие тесты не создают
+    # заявок с этим корпусом, поэтому полная очистка таблицы не требуется.
     director = User(username="director_dates", hashed_password=get_password_hash("pass"), role="director", is_active=True)
     comendant = User(username="comendant_dates", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
-    building = Building(number="20", name="Корпус 20", is_active=True)
+    building = Building(number="dates_filter_bldg", name="Корпус для фильтра дат", is_active=True)
     db.add_all([director, comendant, building])
     db.commit()
 
@@ -883,7 +881,7 @@ def test_list_requests_filter_by_created_and_completed_dates():
     response = client.get(
         "/api/requests",
         headers={"Authorization": f"Bearer {token}"},
-        params={"created_from": today.isoformat(), "created_to": today.isoformat()},
+        params={"building_id": building.id, "created_from": today.isoformat(), "created_to": today.isoformat()},
     )
     assert response.status_code == 200, response.text
     data = response.json()
@@ -894,11 +892,61 @@ def test_list_requests_filter_by_created_and_completed_dates():
     response = client.get(
         "/api/requests",
         headers={"Authorization": f"Bearer {token}"},
-        params={"completed_from": (today - timedelta(days=5)).isoformat(), "completed_to": (today - timedelta(days=5)).isoformat()},
+        params={"building_id": building.id, "completed_from": (today - timedelta(days=5)).isoformat(), "completed_to": (today - timedelta(days=5)).isoformat()},
     )
     assert response.status_code == 200, response.text
     data = response.json()
     assert len(data["items"]) == 1
     assert data["items"][0]["description"] == "Старая"
+
+    db.close()
+
+
+def test_complete_request_populates_completed_at_and_appears_in_date_filter():
+    db = TestingSessionLocal()
+    director = User(username="director_complete_filter", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    contractor = User(username="contractor_complete_filter", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    comendant = User(username="comendant_complete_filter", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="complete_filter_bldg", name="Корпус для завершения", is_active=True)
+    service = Service(name="Мелкий ремонт", unit="шт", price=Decimal("300.00"), is_active=True)
+    db.add_all([director, contractor, comendant, building, service])
+    db.commit()
+    db.refresh(service)
+
+    req = Request(
+        building_id=building.id, description="Завершить и проверить фильтр", status="in_progress",
+        created_by=comendant.id, assigned_to=contractor.id, service_id=service.id,
+        due_date=date.today() + timedelta(days=5), extended_count=0,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login_contractor = client.post("/api/auth/login", json={"username": "contractor_complete_filter", "password": "pass"})
+    token_contractor = login_contractor.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}/complete",
+        headers={"Authorization": f"Bearer {token_contractor}"},
+    )
+    assert response.status_code == 200, response.text
+    complete_data = response.json()
+    assert complete_data["status"] == "completed"
+    assert complete_data["completed_at"] is not None
+
+    login_director = client.post("/api/auth/login", json={"username": "director_complete_filter", "password": "pass"})
+    token_director = login_director.json()["access_token"]
+
+    today_str = date.today().isoformat()
+    response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token_director}"},
+        params={"building_id": building.id, "completed_from": today_str, "completed_to": today_str},
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    matching = [item for item in items if item["id"] == req.id]
+    assert len(matching) == 1
+    assert matching[0]["completed_at"] is not None
 
     db.close()
