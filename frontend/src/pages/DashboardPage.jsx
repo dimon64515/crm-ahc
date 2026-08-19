@@ -432,6 +432,10 @@ function RequestsDashboard() {
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterBuilding, setFilterBuilding] = useState('');
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
+  const [filterCreatedTo, setFilterCreatedTo] = useState('');
+  const [filterCompletedFrom, setFilterCompletedFrom] = useState('');
+  const [filterCompletedTo, setFilterCompletedTo] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const canPrint = user?.role === 'director' || user?.role === 'admin';
@@ -465,6 +469,10 @@ function RequestsDashboard() {
       const params = {};
       if (filterStatus) params.status = filterStatus;
       if (filterBuilding) params.building_id = filterBuilding;
+      if (filterCreatedFrom) params.created_from = filterCreatedFrom;
+      if (filterCreatedTo) params.created_to = filterCreatedTo;
+      if (filterCompletedFrom) params.completed_from = filterCompletedFrom;
+      if (filterCompletedTo) params.completed_to = filterCompletedTo;
       const res = await requestsAPI.list(params);
       setItems(res.data.items || []);
     } catch (e) {
@@ -472,7 +480,7 @@ function RequestsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, filterBuilding]);
+  }, [filterStatus, filterBuilding, filterCreatedFrom, filterCreatedTo, filterCompletedFrom, filterCompletedTo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -490,7 +498,7 @@ function RequestsDashboard() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [items.length, filterStatus, filterBuilding]);
+  }, [filterStatus, filterBuilding, filterCreatedFrom, filterCreatedTo, filterCompletedFrom, filterCompletedTo]);
 
   const toggleSelection = (id) => {
     setSelectedIds((prev) =>
@@ -499,6 +507,14 @@ function RequestsDashboard() {
   };
 
   const toggleAll = () => {
+    if (selectedIds.length === items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((r) => r.id));
+    }
+  };
+
+  const selectAllByFilter = () => {
     if (selectedIds.length === items.length) {
       setSelectedIds([]);
     } else {
@@ -580,18 +596,59 @@ function RequestsDashboard() {
           <option value="">Все корпуса</option>
           {buildings.map(b => <option key={b.id} value={b.id}>{b.number} — {b.name}</option>)}
         </select>
+        <input
+          type="date"
+          placeholder="Создана с"
+          value={filterCreatedFrom}
+          onChange={(e) => setFilterCreatedFrom(e.target.value)}
+          style={styles.filterInput}
+        />
+        <input
+          type="date"
+          placeholder="Создана по"
+          value={filterCreatedTo}
+          onChange={(e) => setFilterCreatedTo(e.target.value)}
+          style={styles.filterInput}
+        />
+        <input
+          type="date"
+          placeholder="Завершена с"
+          value={filterCompletedFrom}
+          onChange={(e) => setFilterCompletedFrom(e.target.value)}
+          style={styles.filterInput}
+        />
+        <input
+          type="date"
+          placeholder="Завершена по"
+          value={filterCompletedTo}
+          onChange={(e) => setFilterCompletedTo(e.target.value)}
+          style={styles.filterInput}
+        />
         {canPrint && (
-          <button
-            onClick={handlePrint}
-            disabled={selectedIds.length === 0}
-            style={{
-              ...styles.secondaryBtn,
-              opacity: selectedIds.length === 0 ? 0.5 : 1,
-              cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
-            }}
-          >
-            🖨 Печать ({selectedIds.length})
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={selectAllByFilter}
+              disabled={items.length === 0}
+              style={{
+                ...styles.secondaryBtn,
+                opacity: items.length === 0 ? 0.5 : 1,
+                cursor: items.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {selectedIds.length === items.length && items.length > 0 ? 'Снять выбор' : 'Выбрать все по фильтру'}
+            </button>
+            <button
+              onClick={handlePrint}
+              disabled={selectedIds.length === 0}
+              style={{
+                ...styles.secondaryBtn,
+                opacity: selectedIds.length === 0 ? 0.5 : 1,
+                cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              🖨 Печать ({selectedIds.length})
+            </button>
+          </div>
         )}
         <button onClick={() => navigate('/requests')} style={styles.filterBtn}>Перейти к заявкам →</button>
       </div>
