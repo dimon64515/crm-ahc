@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from "react-router-dom";;
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, buildingsAPI, usersAPI, servicesAPI } from '../api';
 
@@ -34,127 +34,76 @@ function downloadZip(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
-function PrimaryActionButton({ req, actionId, canTake, canCompleteReq, onAction, isContractor }) {
-  // Новая заявка — "Взять в работу"
-  if (req.status === 'new' && canTake) {
-    return (
-      <button
-        onClick={() => onAction(requestsAPI.take, req.id)}
-        disabled={actionId === req.id}
-        style={styles.actionBtn}
-      >
-        {actionId === req.id ? '…' : 'Взять в работу'}
-      </button>
-    );
-  }
-  // В работе и нет отчёта — "Создать отчёт" (только для подрядчика)
-  if (req.status === 'in_progress' && isContractor && !req.has_work) {
-    return (
-      <a
-        href={`/works/new?request_id=${req.id}`}
-        style={{ ...styles.actionBtn, display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
-      >
-        Создать отчёт
-      </a>
-    );
-  }
-  // В работе и есть отчёт — можно завершить
-  if (req.status === 'in_progress' && canCompleteReq && req.has_work) {
-    return (
-      <button
-        onClick={() => onAction(requestsAPI.complete, req.id)}
-        disabled={actionId === req.id}
-        style={styles.successBtn}
-      >
-        {actionId === req.id ? '…' : 'Завершить'}
-      </button>
-    );
-  }
-  return null;
-}
-
-function ActionsMenu({ req, actionId, canAssign, canPrint, canExtendReq, onAction, onAssign, onPrintOne, loadRequests }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, []);
-
-  const handlePrintOneLocal = async () => {
-    setIsOpen(false);
-    try {
-      const res = await requestsAPI.print([req.id]);
-      const blob = new Blob([res.data], { type: 'application/zip' });
-      onPrintOne(blob, `zayavka_${req.id}.zip`);
-    } catch (e) {
-      alert(e.response?.data?.detail || 'Ошибка формирования печатной формы');
-    }
-  };
-
-  const handleAssignMenu = async () => {
-    setIsOpen(false);
-    onAssign(req.id, req.executor?.id, req.service?.id, loadRequests);
-  };
+function RequestActions({ req, actionId, canTake, canAssign, canPrint, canExtendReq, canOpenReport, isContractor, onAction, onAssign, onPrintOne, loadRequests }) {
+  const canCreateReport = canOpenReport && (!isContractor || !req.has_work);
+  const reportLabel = req.has_work ? 'Изменить отчёт' : 'Создать отчёт';
 
   return (
-    <div style={styles.menuContainer} ref={menuRef}>
-      <button
-        type="button"
-        aria-label="Ещё действия"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((v) => !v)}
-        disabled={actionId === req.id}
-        style={styles.menuBtn}
-      >
-        ⋯
-      </button>
-      {isOpen && (
-        <div style={styles.menuDropdown} role="menu">
-          <Link to={`/requests/${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
-            Открыть
-          </Link>
-          {req.status !== 'completed' && (
-            <Link to={`/works/new?request_id=${req.id}`} style={styles.menuItem} role="menuitem" onClick={() => setIsOpen(false)}>
-              {req.has_work ? 'Изменить отчёт' : 'Создать отчёт'}
-            </Link>
-          )}
-          {canAssign && req.status === 'new' && (
-            <button type="button" style={styles.menuItem} role="menuitem" onClick={handleAssignMenu}>
-              Назначить
-            </button>
-          )}
-          {canPrint && (
-            <button type="button" style={styles.menuItem} role="menuitem" onClick={handlePrintOneLocal}>
-              Печать
-            </button>
-          )}
-          {canExtendReq && (
-            <button type="button" style={styles.menuItem} role="menuitem" onClick={() => { setIsOpen(false); onAction(requestsAPI.extend, req.id); }}>
-              Продлить
-            </button>
-          )}
-        </div>
+    <div style={styles.actionsGroup}>
+      {req.status === 'new' && canTake && (
+        <button
+          onClick={() => onAction(requestsAPI.take, req.id)}
+          disabled={actionId === req.id}
+          style={styles.actionBtn}
+        >
+          {actionId === req.id ? '…' : 'Взять в работу'}
+        </button>
       )}
+      {canAssign && req.status === 'new' && (
+        <button
+          onClick={() => onAssign(req.id, req.executor?.id, req.service?.id, loadRequests)}
+          disabled={actionId === req.id}
+          style={styles.warningBtn}
+        >
+          {actionId === req.id ? '…' : 'Назначить'}
+        </button>
+      )}
+      {req.status !== 'completed' && canCreateReport && (
+        <Link
+          to={`/works/new?request_id=${req.id}`}
+          style={{ ...styles.actionBtn, display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
+        >
+          {reportLabel}
+        </Link>
+      )}
+      {canPrint && (
+        <button
+          onClick={async () => {
+            try {
+              const res = await requestsAPI.print([req.id]);
+              const blob = new Blob([res.data], { type: 'application/zip' });
+              onPrintOne(blob, `zayavka_${req.id}.zip`);
+            } catch (e) {
+              alert(e.response?.data?.detail || 'Ошибка формирования печатной формы');
+            }
+          }}
+          disabled={actionId === req.id}
+          style={styles.secondaryBtn}
+        >
+          Печать
+        </button>
+      )}
+      {canExtendReq && (
+        <button
+          onClick={() => onAction(requestsAPI.extend, req.id)}
+          disabled={actionId === req.id}
+          style={styles.secondaryBtn}
+        >
+          {actionId === req.id ? '…' : 'Продлить'}
+        </button>
+      )}
+      <Link
+        to={`/requests/${req.id}`}
+        style={{ ...styles.actionBtn, display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
+      >
+        Открыть
+      </Link>
     </div>
   );
 }
 
 export default function RequestsListPage() {
-  const { user } = useAuth();
+  const { user } = useAuth(); const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -220,7 +169,7 @@ export default function RequestsListPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.building_id, isContractor, user?.id]);
+  }, [filters.status, filters.building_id, isContractor, user]);
 
   useEffect(() => {
     loadBuildings();
@@ -323,8 +272,8 @@ export default function RequestsListPage() {
     }
   };
 
-  const canComplete = (req) => {
-    if (req.status !== 'in_progress') return false;
+  const canOpenReport = (req) => {
+    if (req.status === 'completed') return false;
     if (user?.role === 'director' || user?.role === 'admin') return true;
     if (user?.role === 'contractor' && req.executor?.id === user.id) return true;
     return false;
@@ -386,28 +335,28 @@ export default function RequestsListPage() {
         )}
       </div>
 
+      <div style={styles.tabBar}>
+        {STATUS_BUTTONS.map((s) => {
+          const active = filters.status === s.value;
+          return (
+            <button
+              key={s.value}
+              onClick={() => setFilters({ ...filters, status: s.value })}
+              style={{
+                ...styles.tabBtn,
+                color: active ? s.style.color : '#6b7280',
+                borderBottomColor: active ? s.style.color : 'transparent',
+                background: active ? s.style.background : 'transparent',
+                fontWeight: active ? 700 : 500,
+              }}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div style={styles.filters}>
-        <div style={styles.statusButtons}>
-          {STATUS_BUTTONS.map((s) => {
-            const active = filters.status === s.value;
-            return (
-              <button
-                key={s.value}
-                onClick={() => setFilters({ ...filters, status: s.value })}
-                style={{
-                  ...styles.statusBtn,
-                  background: s.style.background,
-                  color: s.style.color,
-                  borderColor: s.style.borderColor,
-                  fontWeight: active ? 700 : 500,
-                  boxShadow: active ? 'inset 0 0 0 1px ' + s.style.color : 'none',
-                }}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
         <select
           value={filters.building_id}
           onChange={(e) => setFilters({ ...filters, building_id: e.target.value })}
@@ -435,7 +384,7 @@ export default function RequestsListPage() {
       ) : isMobile ? (
         <div style={styles.cards}>
           {items.map((req) => (
-            <div key={req.id} style={styles.card}>
+            <div key={req.id} style={{...styles.card, cursor: "pointer"}} onClick={() => navigate(`/requests/${req.id}`)}>
               <div style={styles.cardHeader}>
                 <div style={styles.cardTitleRow}>
                   {canPrint && (
@@ -465,27 +414,20 @@ export default function RequestsListPage() {
                 </div>
               </div>
               <div style={styles.cardActions}>
-                <PrimaryActionButton
+                <RequestActions
                   req={req}
                   actionId={actionId}
                   canTake={canTake}
-                  canCompleteReq={canComplete(req)}
-                  onAction={handleAction}
+                  canAssign={canAssign}
+                  canPrint={canPrint}
+                  canExtendReq={canExtend(req)}
+                  canOpenReport={canOpenReport(req)}
                   isContractor={isContractor}
+                  onAction={handleAction}
+                  onAssign={handleAssign}
+                  onPrintOne={downloadZip}
+                  loadRequests={loadRequests}
                 />
-                {!isContractor && (
-                  <ActionsMenu
-                    req={req}
-                    actionId={actionId}
-                    canAssign={canAssign}
-                    canPrint={canPrint}
-                    canExtendReq={canExtend(req)}
-                    onAction={handleAction}
-                    onAssign={handleAssign}
-                    onPrintOne={downloadZip}
-                    loadRequests={loadRequests}
-                  />
-                )}
               </div>
             </div>
           ))}
@@ -545,19 +487,15 @@ export default function RequestsListPage() {
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', width: '1%' }}>
                     <div style={{ ...styles.actionsGroup, justifyContent: 'flex-end' }}>
-                      <PrimaryActionButton
+                      <RequestActions
                         req={req}
                         actionId={actionId}
                         canTake={canTake}
-                        canCompleteReq={canComplete(req)}
-                        onAction={handleAction}
-                      />
-                      <ActionsMenu
-                        req={req}
-                        actionId={actionId}
                         canAssign={canAssign}
                         canPrint={canPrint}
                         canExtendReq={canExtend(req)}
+                        canOpenReport={canOpenReport(req)}
+                        isContractor={isContractor}
                         onAction={handleAction}
                         onAssign={handleAssign}
                         onPrintOne={downloadZip}
@@ -580,16 +518,17 @@ const styles = {
   title: { fontSize: '22px', fontWeight: 700, letterSpacing: '-0.025em' },
   printBtn: { padding: '8px 16px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
   filters: { display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
-  statusButtons: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
-  statusBtn: { padding: '8px 14px', borderRadius: '999px', border: '1px solid', fontSize: '14px', cursor: 'pointer', transition: 'all 0.15s ease' },
+  tabBar: { display: 'flex', gap: '4px', marginBottom: '16px', borderBottom: '1px solid #e5e7eb' },
+  tabBtn: { padding: '10px 18px', border: 'none', borderBottom: '2px solid transparent', background: 'transparent', fontSize: '14px', cursor: 'pointer', transition: 'all 0.15s ease', borderRadius: '8px 8px 0 0' },
   filterInput: { padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', minWidth: '180px' },
   error: { padding: '12px 16px', background: '#fef2f2', color: '#b91c1c', borderRadius: '8px', marginBottom: '16px' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   description: { maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   badge: { display: 'inline-block', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600 },
-  actionBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
+  actionBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', textDecoration: 'none' },
+  secondaryBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
+  warningBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#fffbeb', color: '#d97706', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
   inlineSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' },
-  successBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', color: '#6b7280' },
   spinner: { width: '32px', height: '32px', border: '3px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '12px' },
   empty: { textAlign: 'center', padding: '48px 16px' },
@@ -603,11 +542,7 @@ const styles = {
   cardField: { fontSize: '14px', color: '#374151', lineHeight: '1.4', wordBreak: 'break-word' },
   cardLabel: { color: '#6b7280', fontWeight: 500, marginRight: '4px' },
   cardActions: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center' },
-  actionsGroup: { display: 'inline-flex', gap: '6px', alignItems: 'center' },
-  menuContainer: { position: 'relative', display: 'inline-block' },
-  menuBtn: { width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '16px', fontWeight: 700, color: '#4b5563' },
-  menuDropdown: { position: 'absolute', right: 0, top: '38px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, minWidth: '160px', overflow: 'hidden', textAlign: 'left' },
-  menuItem: { display: 'block', width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', fontSize: '13px', textAlign: 'left', cursor: 'pointer', color: '#374151', textDecoration: 'none', boxSizing: 'border-box' },
+  actionsGroup: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' },
   overdueText: { color: '#dc2626', fontWeight: 600 },
   overdueField: { color: '#dc2626' },
 };

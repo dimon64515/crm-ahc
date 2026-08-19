@@ -55,6 +55,8 @@
 - `require_contractor` — `contractor`, `director` и `admin`
 - `get_current_user` — любой авторизованный
 
+> **Важно:** в текущем коде редактирование цен работы (`PUT /works/{id}/prices`, а также inline-редактирование на фронтенде) доступно только `admin`. `director` видит цены и отчёты, но не может их изменять.
+
 ---
 
 ## Стиль кода (Python)

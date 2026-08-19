@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { requestsAPI } from '../api';
 
 export default function AdminRequestForm({ request, buildings, services, users, onSave, onCancel }) {

@@ -45,7 +45,6 @@ export default function Layout({ children, fullWidth = false }) {
   const navItems = [];
   if (user.role === 'contractor') {
     navItems.push({ to: '/requests', label: 'Заявки' });
-    navItems.push({ to: '/works/new', label: 'Новая работа' });
   }
   if (user.role === 'comendant') {
     navItems.push({ to: '/requests/new', label: 'Новая заявка' });

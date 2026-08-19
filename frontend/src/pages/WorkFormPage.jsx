@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Select from 'react-select';
 import AsyncSelect from 'react-select/async';
@@ -9,6 +9,7 @@ export default function WorkFormPage() {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState([]);
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [requestId, setRequestId] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [services, setServices] = useState([{ id: 1, selected: null, quantity: 1, price: '', unit: '', total: 0 }]);
@@ -19,6 +20,9 @@ export default function WorkFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [photoCounter, setPhotoCounter] = useState(0);
+  const [existingPhotoCount, setExistingPhotoCount] = useState(0);
+  const [hasExistingWork, setHasExistingWork] = useState(false);
+  const [existingWorkId, setExistingWorkId] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const photoInputRef = useRef(null);
 
@@ -96,8 +100,54 @@ export default function WorkFormPage() {
       if (request.service?.id) {
         setServices([{ id: 1, selected: { value: request.service.id, label: request.service.name, price: request.service.price, unit: request.service.unit }, quantity: 1, price: request.service.price, unit: request.service.unit, total: parseFloat(request.service.price || 0) }]);
       }
+      await loadExistingWork(id);
     } catch (e) {
       // ignore missing request info
+    }
+  };
+
+  const loadExistingWork = async (id) => {
+    try {
+      const res = await worksAPI.listByRequest(id);
+      const items = res.data.items || [];
+      if (items.length === 0) return;
+      setHasExistingWork(true);
+      const work = items[0];
+      setExistingWorkId(work.id);
+      if (work.building?.id) {
+        setSelectedBuilding({ value: work.building.id, label: work.building.name || work.building.number });
+      }
+      if (work.description) {
+        setDescription(work.description);
+      }
+      if (work.work_date) {
+        setWorkDate(work.work_date);
+      }
+      if (work.services && work.services.length > 0) {
+        setServices(work.services.map((s, idx) => ({
+          id: idx + 1,
+          selected: { value: s.service_id, label: s.name, price: s.unit_price, unit: s.unit },
+          quantity: s.quantity,
+          price: s.unit_price,
+          unit: s.unit,
+          total: parseFloat(s.total_price || 0),
+        })));
+      }
+      if (work.materials && work.materials.length > 0) {
+        setMaterials(work.materials.map((m, idx) => ({
+          id: idx + 1,
+          selected: { value: m.material_id, label: m.name, price: m.unit_price },
+          quantity: m.quantity,
+          price: m.unit_price,
+          total: parseFloat(m.total_price || 0),
+        })));
+      }
+      if (work.photos && work.photos.length > 0) {
+        setPhotoCounter(work.photos.length);
+        setExistingPhotoCount(work.photos.length);
+      }
+    } catch (e) {
+      // ignore missing work info
     }
   };
 
@@ -156,16 +206,16 @@ export default function WorkFormPage() {
   const handlePhotos = (fileList) => {
     const arr = Array.from(fileList || []);
     console.log('[WorkForm] handlePhotos', arr.length, 'items:', arr.map(f => ({ name: f.name, type: f.type, size: f.size, isFile: f instanceof File })));
-    const total = [...photos, ...arr].length;
+    const total = [...photos, ...arr].length + existingPhotoCount;
     if (total > 20) { setError(`Максимум 20 фотографий (выбрано ${total})`); return; }
     setPhotos(prev => [...prev, ...arr]);
-    setPhotoCounter(total);
+    setPhotoCounter([...photos, ...arr].length + existingPhotoCount);
     setError('');
   };
   const removePhoto = (idx) => { setPhotos(prev => prev.filter((_, i) => i !== idx)); setPhotoCounter(prev => prev - 1); };
 
   const saveDraft = () => {
-    const draft = { selectedBuilding, services, description, materials, workDate };
+    const draft = { requestId: searchParams.get('request_id') || null, selectedBuilding, services, description, materials, workDate };
     localStorage.setItem('work_draft', JSON.stringify(draft));
   };
 
@@ -174,6 +224,9 @@ export default function WorkFormPage() {
     if (!raw) return;
     try {
       const d = JSON.parse(raw);
+      const currentRequestId = searchParams.get('request_id') || null;
+      // Черновик привязан к конкретной заявке, чтобы не подставлять данные из другой заявки
+      if (d.requestId !== currentRequestId) return;
       setDescription(d.description || '');
       setWorkDate(d.workDate || new Date().toISOString().split('T')[0]);
       if (d.services && Array.isArray(d.services) && d.services.length > 0) {
@@ -216,15 +269,23 @@ export default function WorkFormPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    if (user?.role === 'contractor' && hasExistingWork) {
+      setError('Редактирование отчёта доступно только администратору');
+      return;
+    }
     if (!selectedBuilding) { setError('Выберите корпус'); return; }
 
     const selectedServices = services.filter(s => s.selected);
     if (selectedServices.length === 0) { setError('Выберите хотя бы одну услугу'); return; }
     if (checkDuplicateServices()) { setError('Услуги не должны дублироваться'); return; }
 
-    if (photos.length > 20) { setError(`Максимум 20 фотографий (загружено ${photos.length})`); return; }
-    if (photos.length === 0) { setError('Загрузите хотя бы одну фотографию'); return; }
+    const totalPhotos = photos.length + existingPhotoCount;
+    if (totalPhotos > 20) { setError(`Максимум 20 фотографий (выбрано ${totalPhotos})`); return; }
+    if (totalPhotos === 0) { setError('Загрузите хотя бы одну фотографию'); return; }
     if (checkDuplicateMaterials()) { setError('Материалы не должны дублироваться'); return; }
+
+    const selectedMats = materials.filter(m => m.selected);
 
     // Фронтенд-валидация совместно с бэкендом
     const desc = (description || '').trim();
@@ -238,7 +299,6 @@ export default function WorkFormPage() {
       }
     }
 
-    const selectedMats = materials.filter(m => m.selected);
     for (const m of selectedMats) {
       const mq = parseFloat(m.quantity);
       if (!mq || mq <= 0) {
@@ -279,6 +339,10 @@ export default function WorkFormPage() {
       if (photos.length > 0) {
         console.log('[WorkForm] uploading', photos.length, 'photos');
         await worksAPI.uploadPhotos(workId, photos);
+        const newExistingCount = existingPhotoCount + photos.length;
+        setExistingPhotoCount(newExistingCount);
+        setPhotoCounter(newExistingCount);
+        setPhotos([]);
       }
 
       localStorage.removeItem('work_draft');
@@ -288,6 +352,12 @@ export default function WorkFormPage() {
       setMaterials([{ id: 1, selected: null, quantity: 1, price: '', total: 0 }]);
       setPhotos([]);
       setPhotoCounter(0);
+      setExistingPhotoCount(0);
+      setHasExistingWork(false);
+
+      if (user?.role === 'contractor' && requestId) {
+        navigate('/requests');
+      }
     } catch (err) {
       console.error('[WorkForm] save error:', err);
       let msg = 'Ошибка сохранения';
@@ -333,6 +403,23 @@ export default function WorkFormPage() {
         </div>
         <a href="/requests" style={{ display: 'inline-block', padding: '12px 24px', background: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500 }}>
           Перейти к заявкам
+        </a>
+      </div>
+    );
+  }
+
+  // Для подрядчика с уже оформленным отчётом — показываем ссылку на него
+  if (user?.role === 'contractor' && existingWorkId) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '40px auto', padding: '20px' }}>
+        <div style={{ background: '#fffbeb', color: '#92400e', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #fde68a' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px', margin: 0 }}>Отчёт уже оформлен</h2>
+          <p style={{ fontSize: '14px', margin: 0 }}>
+            По этой заявке уже существует отчёт. Подрядчики не могут создать второй отчёт или редактировать существующий.
+          </p>
+        </div>
+        <a href={`/works/${existingWorkId}`} style={{ display: 'inline-block', padding: '12px 24px', background: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500 }}>
+          Открыть отчёт
         </a>
       </div>
     );
@@ -512,8 +599,10 @@ export default function WorkFormPage() {
         )}
 
         <div style={styles.actions}>
-          <button type="submit" disabled={submitting} style={styles.submitBtn} aria-busy={submitting}>
-            {submitting ? 'Сохранение…' : 'Сохранить запись'}
+          <button type="submit" disabled={submitting || (user?.role === 'contractor' && hasExistingWork)} style={styles.submitBtn} aria-busy={submitting}>
+            {submitting
+              ? (user?.role === 'contractor' && requestId ? 'Завершение…' : 'Сохранение…')
+              : (user?.role === 'contractor' && requestId ? 'Завершить' : 'Сохранить запись')}
           </button>
           <button type="button" onClick={() => { localStorage.removeItem('work_draft'); window.location.reload(); }} style={styles.resetBtn}>
             Очистить форму

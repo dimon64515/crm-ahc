@@ -92,6 +92,7 @@ export const materialsAPI = {
 export const worksAPI = {
   create: (data) => api.post('/works', data),
   list: (params) => api.get('/works', { params }),
+  listByRequest: (requestId) => api.get('/works', { params: { request_id: requestId, per_page: 1 } }),
   get: (id) => api.get(`/works/${id}`),
   update: (id, data) => api.put(`/works/${id}`, data),
   remove: (id) => api.delete(`/works/${id}`),

@@ -97,8 +97,15 @@ def build_work_list_item(work: Work) -> dict:
     }
 
 
-def _validate_services(db: Session, services_data: List):
-    """Проверяет список услуг на дубли и активность."""
+def _validate_services(db: Session, services_data: List, allowed_inactive_ids=None):
+    """Проверяет список услуг на дубли и активность.
+
+    allowed_inactive_ids — id услуг, которые можно использовать, даже если они
+    деактивированы (например, услуга, указанная в заявке на момент её создания).
+    """
+    if allowed_inactive_ids is None:
+        allowed_inactive_ids = set()
+
     service_ids = [s.service_id for s in services_data]
     if len(service_ids) != len(set(service_ids)):
         raise HTTPException(status_code=400, detail="Услуги не должны дублироваться")
@@ -109,7 +116,7 @@ def _validate_services(db: Session, services_data: List):
         if service_id not in found_ids:
             raise HTTPException(status_code=400, detail=f"Услуга с id {service_id} не найдена")
     for service in services:
-        if not service.is_active:
+        if not service.is_active and service.id not in allowed_inactive_ids:
             raise HTTPException(status_code=400, detail=f"Услуга с id {service.id} неактивна")
     return services
 
@@ -131,11 +138,10 @@ def create_work(
     if not building:
         raise HTTPException(status_code=404, detail="Корпус не найден")
 
-    services = _validate_services(db, data.services)
-    service_map = {s.id: s for s in services}
-
     work_user_id = current_user.id
     work_building_id = data.building_id
+    req = None
+    allowed_inactive_service_ids = set()
     if data.request_id is not None:
         req = db.query(Request).filter(Request.id == data.request_id).first()
         if not req:
@@ -152,10 +158,21 @@ def create_work(
 
         work_user_id = req.assigned_to or current_user.id
         work_building_id = req.building_id
+        if req.service_id is not None:
+            allowed_inactive_service_ids = {req.service_id}
+
+    services = _validate_services(db, data.services, allowed_inactive_service_ids)
+    service_map = {s.id: s for s in services}
 
     material_ids = [m.material_id for m in data.materials]
     if len(material_ids) != len(set(material_ids)):
         raise HTTPException(status_code=400, detail="Материалы не должны дублироваться")
+
+    # Контроль дублирования: для заявки может существовать только один отчёт
+    if data.request_id is not None:
+        existing_work = db.query(Work).filter(Work.request_id == data.request_id).first()
+        if existing_work is not None:
+            raise HTTPException(status_code=400, detail="Отчёт для этой заявки уже существует")
 
     work = Work(
         user_id=work_user_id,
@@ -204,6 +221,10 @@ def create_work(
     work.materials_total_price = materials_total
     work.total_price = service_total + materials_total
 
+    # Подрядчик при создании отчёта по заявке сразу закрывает её
+    if req is not None and current_user.role == 'contractor':
+        req.status = 'completed'
+
     db.commit()
     db.refresh(work)
     return build_work_response(work)
@@ -216,6 +237,7 @@ def list_works(
     building_id: str = None,
     service_id: str = None,
     user_id: str = None,
+    request_id: int = None,
     search: str = None,
     sort_by: str = None,
     sort_order: str = 'desc',
@@ -239,6 +261,8 @@ def list_works(
         query = query.join(WorkService).filter(WorkService.service_id == int(service_id))
     if user_id:
         query = query.filter(Work.user_id == int(user_id))
+    if request_id is not None:
+        query = query.filter(Work.request_id == request_id)
     if search:
         query = query.filter(Work.description.ilike(f"%{search}%"))
 

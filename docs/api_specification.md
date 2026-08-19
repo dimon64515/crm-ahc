@@ -387,19 +387,227 @@ Soft delete.
 
 ---
 
-## 6. Работы (основной модуль)
+## 6. Заявки
+
+### GET /requests
+
+Список заявок.
+
+**Доступ:** `contractor`, `director`, `admin`
+
+**Примечание:** подрядчик видит все новые заявки, а также заявки «В работе» и «Завершённые», назначенные только на него. Директор и администратор видят все заявки.
+
+**Query params:**
+- `status` — фильтр по статусу (`new`, `in_progress`, `completed`)
+- `building_id` — фильтр по корпусу
+- `date_from` — дата создания с (YYYY-MM-DD)
+- `date_to` — дата создания по (YYYY-MM-DD)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 42,
+        "building": {
+          "id": 1,
+          "number": "12",
+          "name": "Корпус 12"
+        },
+        "service": {
+          "id": 5,
+          "name": "Монтаж трубы",
+          "unit": "м",
+          "price": 350.00,
+          "is_active": true
+        },
+        "description": "Замена трубопровода в подвале",
+        "status": "in_progress",
+        "creator": {
+          "id": 10,
+          "username": "comendant1",
+          "full_name": "Петров П.П.",
+          "role": "comendant",
+          "is_active": true
+        },
+        "executor": {
+          "id": 2,
+          "username": "contractor1",
+          "full_name": "Иванов И.И.",
+          "role": "contractor",
+          "is_active": true
+        },
+        "due_date": "2025-06-01",
+        "extended_count": 0,
+        "photos_count": 2,
+        "created_at": "2025-05-27T10:00:00",
+        "has_work": false
+      }
+    ],
+    "total": 15
+  }
+}
+```
+
+### GET /requests/{id}
+
+Детали заявки.
+
+**Доступ:** `contractor`, `director`, `admin`, `comendant` (комендант видит только свои заявки)
+
+### POST /requests
+
+Создание заявки.
+
+**Доступ:** `comendant`
+
+**Request:**
+```json
+{
+  "building_id": 1,
+  "description": "Замена трубопровода в подвале"
+}
+```
+
+### PUT /requests/{id}
+
+Базовое редактирование заявки.
+
+**Доступ:** `director`, `admin`
+
+**Request:**
+```json
+{
+  "building_id": 1,
+  "description": "Обновлённое описание",
+  "service_id": 5,
+  "assigned_to": 2
+}
+```
+
+### PUT /requests/{id}/admin
+
+Расширенное редактирование заявки, включая статус и срок исполнения.
+
+**Доступ:** только `admin`
+
+**Request:**
+```json
+{
+  "building_id": 1,
+  "description": "Обновлённое описание",
+  "service_id": 5,
+  "assigned_to": 2,
+  "status": "completed",
+  "due_date": "2025-06-10"
+}
+```
+
+### PUT /requests/{id}/take
+
+Взять заявку в работу. Текущий пользователь становится исполнителем, статус меняется на `in_progress`.
+
+**Доступ:** `contractor`, `director`, `admin`
+
+### PUT /requests/{id}/assign
+
+Назначить исполнителя на заявку.
+
+**Доступ:** `director`, `admin`
+
+**Request:**
+```json
+{
+  "user_id": 2,
+  "service_id": 5
+}
+```
+
+### PUT /requests/{id}/complete
+
+Завершить заявку.
+
+**Доступ:** `director`, `admin`, а также `contractor` — только для заявок, назначенных на него.
+
+**Поведение:**
+- Если для заявки ещё нет отчёта (`Work`), автоматически создаётся минимальная запись о работе на основе данных заявки.
+- Для успешного завершения требуется:
+  - непустое описание работы;
+  - хотя бы одна услуга в отчёте.
+- Фото и материалы не являются обязательными для этого endpoint'а.
+
+**Ошибки:**
+- `400` — «Заявка уже завершена»
+- `400` — «Описание работы обязательно»
+- `400` — «Для завершения заявки требуется хотя бы одна услуга в отчете»
+- `403` — «Недостаточно прав» (для подрядчика — чужая заявка)
+
+### POST /requests/{id}/extend
+
+Продлить срок исполнения заявки на 5 дней.
+
+**Доступ:** только `admin`
+
+### POST /requests/{id}/photos
+
+Загрузка фотографий к заявке.
+
+**Доступ:** `comendant` (только к своим заявкам)
+
+**Content-Type:** `multipart/form-data`
+
+**Request:**
+- `files` — массив файлов (максимум 5 фото на заявку)
+
+### POST /requests/print
+
+Формирование ZIP-архива с печатными формами заявок в формате `.docx`.
+
+**Доступ:** `director`, `admin`, `contractor` (только назначенные на него заявки)
+
+**Request:**
+```json
+{
+  "ids": [42, 43]
+}
+```
+
+**Response:** `Content-Type: application/zip`
+
+### DELETE /requests/{id}
+
+Удаление заявки (soft delete).
+
+**Доступ:** только `admin`
+
+---
+
+## 7. Работы (основной модуль)
 
 ### POST /works
 
-Создание записи о работе.
+Создание записи о работе (отчёта).
+
+**Доступ:** `contractor`, `director`, `admin`
+
+**Ограничения для подрядчика:**
+- может создавать отчёт только если передан `request_id`;
+- заявка должна быть назначена на него (`assigned_to == current_user.id`);
+- нельзя создать второй отчёт для одной заявки.
 
 **Request:**
 ```json
 {
   "building_id": 1,
   "work_date": "2025-05-27",
-  "service_id": 5,
-  "service_quantity": 15.5,
+  "services": [
+    {
+      "service_id": 5,
+      "quantity": 15.5
+    }
+  ],
   "description": "Замена трубопровода в подвале",
   "materials": [
     {
@@ -410,17 +618,18 @@ Soft delete.
       "material_id": 34,
       "quantity": 3
     }
-  ]
+  ],
+  "request_id": 42
 }
 ```
 
 **Валидация:**
 - `building_id` — обязательно
 - `work_date` — обязательно, не в будущем
-- `service_id` — обязательно
-- `service_quantity` — обязательно, > 0
+- `services` — обязательно, минимум одна услуга; каждая услуга должна иметь `service_id` и `quantity > 0`
 - `description` — обязательно, минимум 5 символов
 - `materials` — опционально, каждый элемент должен иметь `material_id` и `quantity > 0`
+- `request_id` — опционально; если указан, для него не должно существовать другой записи `Work`
 
 **Response (201):**
 ```json
@@ -434,14 +643,16 @@ Soft delete.
       "name": "Корпус 12"
     },
     "work_date": "2025-05-27",
-    "service": {
-      "id": 5,
-      "name": "Монтаж трубы",
-      "unit": "м"
-    },
-    "service_quantity": 15.5,
-    "service_unit_price": 350.00,
-    "service_total_price": 5425.00,
+    "services": [
+      {
+        "service_id": 5,
+        "name": "Монтаж трубы",
+        "unit": "м",
+        "quantity": 15.5,
+        "unit_price": 350.00,
+        "total_price": 5425.00
+      }
+    ],
     "description": "Замена трубопровода в подвале",
     "materials": [
       {
@@ -463,8 +674,9 @@ Soft delete.
     ],
     "materials_total_price": 3632.93,
     "total_price": 9057.93,
-    "photos_count": 0,
-    "files_count": 0,
+    "request_id": 42,
+    "photos": [],
+    "files": [],
     "created_at": "2025-05-27T14:30:22",
     "created_by": {
       "id": 1,
@@ -474,6 +686,11 @@ Soft delete.
 }
 ```
 
+**Ошибки:**
+- `400` — «Отчёт для этой заявки уже существует» (если для `request_id` уже есть работа)
+- `400` — «Нельзя создавать отчет для завершённой заявки»
+- `403` — «Заявка назначена другому исполнителю» (для подрядчика)
+
 ### GET /works
 
 Список работ.
@@ -481,13 +698,12 @@ Soft delete.
 **Примечание:** подрядчик (`contractor`) видит только свои записи. `director` и `admin` видят все записи.
 
 **Query params:**
-
-**Query params:**
 - `date_from` — дата с (YYYY-MM-DD)
 - `date_to` — дата по (YYYY-MM-DD)
 - `building_id` — фильтр по корпусу
 - `service_id` — фильтр по виду работ
 - `user_id` — фильтр по подрядчику
+- `request_id` — фильтр по ID заявки (полезно для проверки существования отчёта по заявке)
 - `search` — поиск по описанию
 - `page` — страница (default: 1)
 - `per_page` — количество (default: 50)
@@ -519,34 +735,47 @@ Soft delete.
 
 ### PUT /works/{id}
 
-Частичное редактирование работы: описание, дата работы, количество услуги.
+Редактирование работы.
 
-**Доступ:**
-- `contractor` — только свои записи (`work.user_id == current_user.id`)
-- `admin` — любые записи
-- `director` — только просмотр, редактирование недоступно
+**Доступ:** только `admin`
 
 **Request:**
 ```json
 {
   "description": "Обновлённое описание",
-  "service_quantity": 20.5,
-  "work_date": "2025-05-28"
+  "work_date": "2025-05-28",
+  "building_id": 2,
+  "user_id": 3,
+  "request_id": 42,
+  "services": [
+    {
+      "service_id": 5,
+      "quantity": 20.5
+    }
+  ],
+  "materials": [
+    {
+      "material_id": 12,
+      "quantity": 20.5
+    }
+  ]
 }
 ```
+
+> **Примечание:** подрядчик и директор не могут редактировать существующие записи о работе. Повторное редактирование отчёта доступно только администратору.
 
 ### DELETE /works/{id}
 
 Удаление работы.
 
 **Доступ:**
-- `contractor` — только свои записи
 - `admin` — любые записи
-- `director` — только просмотр, удаление недоступно
+- `contractor` — только свои записи
+- `director` — недоступно
 
 ---
 
-## 7. Фото и файлы
+## 8. Фото и файлы
 
 ### POST /works/{id}/photos
 
@@ -602,7 +831,7 @@ Soft delete.
 
 ---
 
-## 8. Отчёты
+## 9. Отчёты
 
 ### GET /reports/summary
 
@@ -676,7 +905,7 @@ Soft delete.
 
 ---
 
-## 9. Редактирование цен (только admin)
+## 10. Редактирование цен (только admin)
 
 ### PUT /works/{id}/prices
 
@@ -714,7 +943,7 @@ Soft delete.
 
 ---
 
-## 10. Бэкапы
+## 11. Бэкапы
 
 ### POST /backups/photos
 

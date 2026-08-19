@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
-from app.models import User, Building, Service, Work, WorkService
+from app.models import User, Building, Service, Work, WorkService, Request
 from app.core.security import get_password_hash
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -139,4 +139,54 @@ def test_list_works_filter_by_service_id():
     data = response.json()
     assert data["total"] == 1
     assert data["items"][0]["id"] == work_a.id
+    db.close()
+
+
+def test_contractor_can_create_work_with_inactive_request_service():
+    db = TestingSessionLocal()
+    contractor = User(username="inactive_svc_contractor", hashed_password=get_password_hash("pass"), role="contractor", is_active=True)
+    building = Building(number="18", name="Корпус 18", is_active=True)
+    service = Service(name="Услуга в заявке", unit="шт", price=Decimal("300.00"), is_active=False)
+    db.add_all([contractor, building, service])
+    db.commit()
+    db.refresh(service)
+
+    request = Request(
+        building_id=building.id,
+        service_id=service.id,
+        description="Заявка с неактивной услугой",
+        status="in_progress",
+        created_by=contractor.id,
+        assigned_to=contractor.id,
+        due_date=date.today(),
+        extended_count=0,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+
+    login = client.post("/api/auth/login", json={"username": "inactive_svc_contractor", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/works",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "building_id": building.id,
+            "work_date": "2026-06-10",
+            "description": "Отчёт по заявке",
+            "services": [{"service_id": service.id, "quantity": "2.00"}],
+            "request_id": request.id,
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["request_id"] == request.id
+    assert Decimal(data["services"][0]["total_price"]) == Decimal("600.00")
+
+    # Заявка должна автоматически завершиться
+    db.close()
+    db = TestingSessionLocal()
+    refreshed_request = db.query(Request).filter(Request.id == request.id).first()
+    assert refreshed_request.status == "completed"
     db.close()

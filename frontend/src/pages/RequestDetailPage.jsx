@@ -59,7 +59,6 @@ export default function RequestDetailPage() {
   const [editedBuildingId, setEditedBuildingId] = useState('');
   const [editedServiceId, setEditedServiceId] = useState('');
   const [isAdminEditing, setIsAdminEditing] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -252,7 +251,7 @@ export default function RequestDetailPage() {
   );
   const canExtend = isAdmin && req?.status !== 'completed';
   const canEdit = isDirector && req?.status !== 'completed';
-  const canCreateWork = req && req.status !== 'completed' && ['contractor', 'director', 'admin'].includes(user.role) && (user.role !== 'contractor' || req.executor?.id === user.id || !req.executor?.id);
+  const canCreateWork = req && req.status !== 'completed' && !req.has_work && ['contractor', 'director', 'admin'].includes(user.role) && (user.role !== 'contractor' || req.executor?.id === user.id);
 
   const backPath = isComendant ? '/my-requests' : '/requests';
 

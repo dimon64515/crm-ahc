@@ -21,7 +21,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (!user) return <Navigate to="/login" />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     if (user.role === 'comendant') return <Navigate to="/requests/new" />;
-    return user.role === 'contractor' ? <Navigate to="/requests" /> : <Navigate to="/dashboard" />;
+    return user.role === "contractor" ? <Navigate to="/requests" /> : <Navigate to="/dashboard" />;
   }
   return children;
 }

@@ -10,7 +10,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db, SessionLocal
-from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService, AuditLog
+from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService, WorkMaterial, AuditLog
+from decimal import Decimal
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate, AdminRequestUpdate, RequestDeleteResponse
 from app.core.dependencies import get_current_user, require_comendant, require_executor, require_director, require_admin
 from app.core.config import get_settings
@@ -249,7 +250,7 @@ def update_request(
     if req.deleted_at is not None:
         raise HTTPException(status_code=400, detail="Нельзя редактировать удалённую заявку")
 
-    if req.status == "completed" and current_user.role != "admin":
+    if req.status == "completed":
         raise HTTPException(status_code=400, detail="Нельзя редактировать завершённую заявку")
 
     old_values = {}
@@ -480,14 +481,36 @@ def complete_request(
 
     existing_work = db.query(Work).options(selectinload(Work.photos), selectinload(Work.work_services), selectinload(Work.work_materials)).filter(Work.request_id == req.id).first()
     if not existing_work:
-        raise HTTPException(status_code=400, detail="Сначала заполните отчет по работе и прикрепите фото")
+        # Автоматически создаём минимальный отчёт по заявке, если его ещё нет
+        work_user_id = req.assigned_to or current_user.id
+        existing_work = Work(
+            user_id=work_user_id,
+            building_id=req.building_id,
+            request_id=req.id,
+            work_date=date.today(),
+            description=req.description or "",
+            materials_total_price=Decimal('0'),
+            total_price=Decimal('0'),
+        )
+        db.add(existing_work)
+        db.flush()
+        if req.service_id is not None:
+            service = db.query(Service).filter(Service.id == req.service_id, Service.is_active == True).first()
+            if service:
+                work_service = WorkService(
+                    work_id=existing_work.id,
+                    service_id=service.id,
+                    quantity=1,
+                    unit_price=service.price,
+                    total_price=service.price,
+                )
+                db.add(work_service)
+                existing_work.total_price = service.price
+        db.flush()
+        db.refresh(existing_work)
 
     if not existing_work.description or not existing_work.description.strip():
         raise HTTPException(status_code=400, detail="Описание работы обязательно")
-    if len(existing_work.photos) == 0:
-        raise HTTPException(status_code=400, detail="Для завершения заявки необходимо прикрепить хотя бы одно фото работы")
-    if len(existing_work.work_materials) == 0:
-        raise HTTPException(status_code=400, detail="Для завершения заявки необходимо добавить материалы в отчет")
     if len(existing_work.work_services) == 0:
         raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одна услуга в отчете")
 
