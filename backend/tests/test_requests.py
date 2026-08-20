@@ -1120,3 +1120,67 @@ def test_list_requests_invalid_date_returns_422():
     )
     assert response.status_code == 422, response.text
     db.close()
+
+
+def test_comendant_can_create_emergency_request():
+    db = TestingSessionLocal()
+    comendant = User(username="comendant_emergency", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    director = User(username="director_emergency", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    building = Building(number="90", name="Корпус 90", is_active=True)
+    db.add_all([comendant, director, building])
+    db.commit()
+
+    comendant_login = client.post("/api/auth/login", json={"username": "comendant_emergency", "password": "pass"})
+    comendant_token = comendant_login.json()["access_token"]
+    director_login = client.post("/api/auth/login", json={"username": "director_emergency", "password": "pass"})
+    director_token = director_login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {comendant_token}"},
+        json={"building_id": building.id, "description": "Прорыв трубы", "is_emergency": True},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["description"] == "Прорыв трубы"
+    assert data["is_emergency"] is True
+
+    # Проверяем, что флаг приходит в общем списке заявок (доступен директору)
+    list_response = client.get(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {director_token}"},
+    )
+    assert list_response.status_code == 200, list_response.text
+    items = list_response.json()["items"]
+    assert any(item["id"] == data["id"] and item["is_emergency"] is True for item in items)
+
+    # Проверяем, что флаг приходит в /requests/my
+    my_response = client.get(
+        "/api/requests/my",
+        headers={"Authorization": f"Bearer {comendant_token}"},
+    )
+    assert my_response.status_code == 200, my_response.text
+    my_items = my_response.json()["items"]
+    assert any(item["id"] == data["id"] and item["is_emergency"] is True for item in my_items)
+    db.close()
+
+
+def test_request_defaults_to_non_emergency():
+    db = TestingSessionLocal()
+    comendant = User(username="comendant_default", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="91", name="Корпус 91", is_active=True)
+    db.add_all([comendant, building])
+    db.commit()
+
+    login = client.post("/api/auth/login", json={"username": "comendant_default", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/api/requests",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"building_id": building.id, "description": "Обычная заявка"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["is_emergency"] is False
+    db.close()
