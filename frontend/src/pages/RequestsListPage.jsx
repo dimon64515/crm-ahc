@@ -433,7 +433,15 @@ export default function RequestsListPage() {
       ) : isMobile ? (
         <div style={styles.cards}>
           {items.map((req) => (
-            <div key={req.id} style={{...styles.card, cursor: "pointer"}} onClick={() => navigate(`/requests/${req.id}`)}>
+            <div
+              key={req.id}
+              style={{
+                ...styles.card,
+                cursor: "pointer",
+                ...(req.is_emergency ? { background: '#fef2f2' } : {}),
+              }}
+              onClick={() => navigate(`/requests/${req.id}`)}
+            >
               <div style={styles.cardHeader}>
                 <div style={styles.cardTitleRow}>
                   {canPrint && (
@@ -508,7 +516,7 @@ export default function RequestsListPage() {
             </thead>
             <tbody>
               {items.map((req) => (
-                <tr key={req.id}>
+                <tr key={req.id} style={req.is_emergency ? { ...styles.row, backgroundColor: '#fef2f2' } : styles.row}>
                   {canPrint && (
                     <td style={{ textAlign: 'center' }}>
                       <input
@@ -568,6 +576,7 @@ const styles = {
   filterInput: { padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', minWidth: '180px' },
   error: { padding: '12px 16px', background: '#fef2f2', color: '#b91c1c', borderRadius: '8px', marginBottom: '16px' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  row: {},
   description: { maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   badge: { display: 'inline-block', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600 },
   actionBtn: { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', textDecoration: 'none' },
