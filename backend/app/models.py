@@ -182,6 +182,7 @@ class Request(Base):
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     due_date = Column(Date, nullable=False)
     extended_count = Column(Integer, default=0)
+    is_emergency = Column(Boolean, default=False, nullable=False, server_default='false')
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)

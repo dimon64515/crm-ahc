@@ -344,6 +344,7 @@ class RequestPhotoResponse(BaseModel):
 class RequestCreate(BaseModel):
     building_id: int
     description: str = Field(min_length=5)
+    is_emergency: bool = False
 
     @field_validator('description')
     @classmethod
@@ -419,6 +420,7 @@ class RequestResponse(BaseModel):
     executor: Optional[UserResponse]
     due_date: date
     extended_count: int
+    is_emergency: bool
     photos: List[RequestPhotoResponse]
     created_at: datetime
     updated_at: datetime
@@ -438,6 +440,7 @@ class RequestListItem(BaseModel):
     executor: Optional[UserResponse]
     due_date: date
     extended_count: int
+    is_emergency: bool
     photos_count: int
     created_at: datetime
     completed_at: Optional[datetime] = None
