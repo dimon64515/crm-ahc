@@ -56,6 +56,7 @@ def build_request_response(req: Request, db: Session = None) -> dict:
         "executor": req.executor,
         "due_date": req.due_date,
         "extended_count": req.extended_count,
+        "is_emergency": req.is_emergency,
         "photos": [
             {
                 "id": p.id,
@@ -89,6 +90,7 @@ def build_request_list_item(req: Request, db: Session = None) -> dict:
         "executor": req.executor,
         "due_date": req.due_date,
         "extended_count": req.extended_count,
+        "is_emergency": req.is_emergency,
         "photos_count": len(req.photos),
         "created_at": req.created_at,
         "completed_at": req.completed_at,
@@ -134,6 +136,7 @@ def create_request(
         created_by=current_user.id,
         due_date=date.today() + timedelta(days=5),
         extended_count=0,
+        is_emergency=data.is_emergency,
     )
     db.add(request)
     db.commit()
@@ -527,7 +530,6 @@ def complete_request(
         raise HTTPException(status_code=400, detail="Описание работы обязательно")
     if len(existing_work.work_services) == 0:
         raise HTTPException(status_code=400, detail="Для завершения заявки требуется хотя бы одна услуга в отчете")
-
     req.status = "completed"
     req.completed_at = datetime.utcnow()
     if req.assigned_to is None:
