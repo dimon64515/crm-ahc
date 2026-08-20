@@ -12,6 +12,7 @@ export default function RequestNewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState('');
+  const [isEmergency, setIsEmergency] = useState(false);
 
   useEffect(() => {
     buildingsAPI.list({ is_active: true }).then(r => setBuildings(r.data));
@@ -41,7 +42,7 @@ export default function RequestNewPage() {
     setSubmitting(true);
     setUploadStage('Создание заявки…');
     try {
-      const res = await requestsAPI.create({ building_id: parseInt(buildingId), description });
+      const res = await requestsAPI.create({ building_id: parseInt(buildingId), description, is_emergency: isEmergency });
       const requestId = res.data.id;
       if (photos.length > 0) {
         setUploadStage('Загрузка фото…');
@@ -77,6 +78,17 @@ export default function RequestNewPage() {
         <div style={styles.field}>
           <label style={styles.label}>Описание</label>
           <textarea value={description} onChange={e => setDescription(e.target.value)} required minLength={5} style={{ ...styles.input, minHeight: 120 }} />
+        </div>
+        <div style={styles.field}>
+          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={isEmergency}
+              onChange={(e) => setIsEmergency(e.target.checked)}
+              disabled={submitting}
+            />
+            Аварийная срочная заявка
+          </label>
         </div>
         <div style={styles.field}>
           <label style={styles.label}>Фото (до 5)</label>
