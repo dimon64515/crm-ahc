@@ -371,3 +371,31 @@ def test_director_cannot_delete_request():
 
     assert response.status_code == 403
     db.close()
+
+
+def test_admin_cannot_change_is_emergency():
+    db = TestingSessionLocal()
+    admin = User(username="admin_emergency_immutable", hashed_password=get_password_hash("testpass123"), role="admin", is_active=True)
+    comendant = User(username="comendant_emergency_immutable2", hashed_password=get_password_hash("testpass123"), role="comendant", is_active=True)
+    building = Building(number="93", name="Корпус 93", is_active=True)
+    db.add_all([admin, comendant, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Не менять флаг админом", status="new", created_by=comendant.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0, is_emergency=False)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    token = get_token_for_user(client, admin)
+
+    response = client.put(
+        f"/api/requests/{req.id}/admin",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Обновлённое описание", "is_emergency": True},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["description"] == "Обновлённое описание"
+    assert data["is_emergency"] is False
+    db.close()

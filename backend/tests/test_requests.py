@@ -1184,3 +1184,32 @@ def test_request_defaults_to_non_emergency():
     data = response.json()
     assert data["is_emergency"] is False
     db.close()
+
+
+def test_is_emergency_cannot_be_changed_by_director():
+    db = TestingSessionLocal()
+    director = User(username="director_emergency_immutable", hashed_password=get_password_hash("pass"), role="director", is_active=True)
+    comendant = User(username="comendant_emergency_immutable", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
+    building = Building(number="92", name="Корпус 92", is_active=True)
+    db.add_all([director, comendant, building])
+    db.commit()
+
+    req = Request(building_id=building.id, description="Не менять флаг", status="new", created_by=comendant.id,
+                  due_date=date.today() + timedelta(days=5), extended_count=0, is_emergency=False)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    login = client.post("/api/auth/login", json={"username": "director_emergency_immutable", "password": "pass"})
+    token = login.json()["access_token"]
+
+    response = client.put(
+        f"/api/requests/{req.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Обновлённое описание", "is_emergency": True},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["description"] == "Обновлённое описание"
+    assert data["is_emergency"] is False
+    db.close()
