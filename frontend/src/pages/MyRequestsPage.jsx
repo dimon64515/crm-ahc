@@ -89,7 +89,7 @@ export default function MyRequestsPage() {
                 <tr
                   key={req.id}
                   onClick={() => navigate(`/requests/${req.id}`)}
-                  style={styles.row}
+                  style={req.is_emergency ? { ...styles.row, backgroundColor: '#fef2f2' } : styles.row}
                 >
                   <td className="tabular-nums">{req.id}</td>
                   <td>{req.building?.name || req.building?.number || '—'}</td>
