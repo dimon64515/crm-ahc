@@ -282,7 +282,7 @@ export default function WorkDetailPage() {
         <div style={styles.cardHeader}>
           <div>
             <h1 style={styles.title}>Запись №{work.id}</h1>
-            <p style={styles.meta}>Дата: <strong className="tabular-nums">{work.work_date}</strong> · Корпус: <strong>{work.building?.number}</strong></p>
+            <p style={styles.meta}>Дата: <strong className="tabular-nums">{work.work_date}</strong> · Корпус: <strong>{work.building?.number}</strong>{work.request_id && <> · Заявка: <Link to={`/requests/${work.request_id}`} style={styles.link}>№{work.request_id}</Link></>}</p>
           </div>
           <div style={styles.badge}>{(work.services || []).map(s => s.name).join(', ') || '—'}</div>
         </div>

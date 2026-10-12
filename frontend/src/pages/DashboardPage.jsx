@@ -6,7 +6,11 @@ import { worksAPI, reportsAPI, buildingsAPI, servicesAPI, usersAPI, requestsAPI 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('requests');
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('dashboard_active_tab') || 'requests');
+
+  useEffect(() => {
+    sessionStorage.setItem('dashboard_active_tab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!user || user.role === 'contractor') {
@@ -64,14 +68,15 @@ function DetailedReport() {
   const { user } = useAuth();
   const [works, setWorks] = useState([]);
   const [total, setTotal] = useState(0);
-  const [filters, setFilters] = useState({ date_from: '', date_to: '', building_id: '', service_id: '', user_id: '', search: '' });
+  const savedDetailed = (() => { try { return JSON.parse(sessionStorage.getItem('dashboard_detailed_state')) || {}; } catch { return {}; } })();
+  const [filters, setFilters] = useState(savedDetailed.filters || { date_from: '', date_to: '', building_id: '', service_id: '', user_id: '', search: '' });
   const [buildings, setBuildings] = useState([]);
   const [services, setServices] = useState([]);
   const [contractors, setContractors] = useState([]);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(50);
-  const [sortBy, setSortBy] = useState('created');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [page, setPage] = useState(savedDetailed.page || 1);
+  const [perPage, setPerPage] = useState(savedDetailed.perPage || 50);
+  const [sortBy, setSortBy] = useState(savedDetailed.sortBy || 'created');
+  const [sortOrder, setSortOrder] = useState(savedDetailed.sortOrder || 'desc');
   const [loading, setLoading] = useState(false);
   const [totals, setTotals] = useState({ service_total: 0, materials_total: 0, total: 0 });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -82,6 +87,10 @@ function DetailedReport() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('dashboard_detailed_state', JSON.stringify({ filters, page, perPage, sortBy, sortOrder }));
+  }, [filters, page, perPage, sortBy, sortOrder]);
 
   useEffect(() => { loadBuildings(); loadServices(); loadContractors(); loadWorks(); }, []);
 
