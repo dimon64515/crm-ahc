@@ -18,7 +18,9 @@ export default function LoginPage() {
     try {
       const user = await login(username, password);
       if (user.role === 'contractor') {
-        navigate('/works/new');
+        navigate('/requests');
+      } else if (user.role === 'comendant') {
+        navigate('/requests/new');
       } else {
         navigate('/dashboard');
       }
