@@ -371,6 +371,34 @@ def _format_request_label(work: Work) -> str:
     return str(work.request_id)
 
 
+def _set_fixed_table_layout(table, widths) -> None:
+    """Прописывает фиксированные ширины колонок таблицы (tblW + tblGrid).
+
+    Без этого Word и LibreOffice берут равные колонки из tblGrid по умолчанию
+    и игнорируют ширины ячеек, заданные через cell.width.
+    """
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+    tblW = tblPr.find(qn('w:tblW'))
+    if tblW is None:
+        tblW = OxmlElement('w:tblW')
+        tblPr.insert(0, tblW)
+    tblW.set(qn('w:w'), str(sum(int(w.twips) for w in widths)))
+    tblW.set(qn('w:type'), 'dxa')
+    tblLayout = tblPr.find(qn('w:tblLayout'))
+    if tblLayout is None:
+        tblLayout = OxmlElement('w:tblLayout')
+        tblPr.append(tblLayout)
+    tblLayout.set(qn('w:type'), 'fixed')
+    tblGrid = tbl.find(qn('w:tblGrid'))
+    for gridCol in list(tblGrid):
+        tblGrid.remove(gridCol)
+    for w in widths:
+        gridCol = OxmlElement('w:gridCol')
+        gridCol.set(qn('w:w'), str(int(w.twips)))
+        tblGrid.append(gridCol)
+
+
 def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = None, contractor_name: str = "") -> BytesIO:
     """Генерирует Word-документ с актом сдачи-приемки по списку работ."""
     doc = Document()
@@ -437,8 +465,10 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     add_text("3. Исполнитель оказал услуги______________________________________________.")
     p = add_text("(своевременно / не своевременно)")
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    add_text("4. Заказчик по объему и качеству оказанных Исполнителем услуг (претензии не имеет/претензии имеет)__________________________________________________________________________________________________________________________________________________________________________.")
-    add_text("5. Подписанием Акта Стороны подтверждают выполнение условий договора возмездного оказания услуг ____________________________________________________________________________________.")
+    add_text("4. Заказчик по объему и качеству оказанных Исполнителем услуг (претензии не имеет/претензии имеет)")
+    add_text("_" * 75 + ".")
+    add_text("5. Подписанием Акта Стороны подтверждают выполнение условий договора возмездного оказания услуг")
+    add_text("_" * 75 + ".")
     p = add_text("(надлежащим образом/ с замечанием)")
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
@@ -450,7 +480,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     table.allow_autofit = False
 
     hdr = table.rows[0].cells
-    headers = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование материалов", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость материалов руб."]
+    headers = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование материалов", "Кол-во", "Ед. изм.", "Цена за ед., руб.", "Сумма, руб."]
     # Сумма ширин = 17.5 см (ширина листа 21 см минус поля 2.0 + 1.5 см)
     widths = [Cm(0.8), Cm(1.8), Cm(1.8), Cm(2.5), Cm(4.4), Cm(1.2), Cm(1.5), Cm(1.7), Cm(1.8)]
     for i, (h, w) in enumerate(zip(headers, widths)):
@@ -508,6 +538,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
             run.font.bold = True
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
+    _set_fixed_table_layout(table, widths)
 
     # Таблица работ
     add_text("7. Объем оказанных услуг:", bold=True)
@@ -517,7 +548,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
     table2.allow_autofit = False
 
     hdr2 = table2.rows[0].cells
-    headers2 = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование работ", "Кол-во", "Ед. измерения", "Цена за ед. руб.", "Стоимость работ (услуг) руб."]
+    headers2 = ["№", "№ заявки", "Дата работ", "Адрес объекта", "Наименование работ", "Кол-во", "Ед. изм.", "Цена за ед., руб.", "Сумма, руб."]
     # Сумма ширин = 17.5 см (ширина листа 21 см минус поля 2.0 + 1.5 см)
     widths2 = [Cm(0.8), Cm(1.8), Cm(1.8), Cm(2.5), Cm(4.4), Cm(1.2), Cm(1.5), Cm(1.7), Cm(1.8)]
     for i, (h, w) in enumerate(zip(headers2, widths2)):
@@ -572,6 +603,7 @@ def generate_act_docx(works: List[Work], date_from: str = None, date_to: str = N
             run.font.bold = True
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
+    _set_fixed_table_layout(table2, widths2)
 
     # Итого по акту
     total = sum((w.total_price or Decimal("0") for w in works), Decimal("0"))

@@ -131,3 +131,37 @@ def test_act_materials_table_has_request_and_date_columns():
     row_values = [cell.text for cell in tables[0].rows[1].cells]
     assert row_values[1] == "42 от 21.07.26", f"Номер заявки с датой в материалах не выведен: {row_values}"
     assert row_values[2] == "15.06.2026", f"Дата работ в материалах не выведена: {row_values}"
+
+
+def test_act_tables_have_fixed_grid_widths():
+    """Ширины колонок должны быть заданы в tblGrid и tblW, иначе Word/LO игнорируют tcW."""
+    from docx.oxml.ns import qn
+
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    assert len(doc.tables) >= 2, "В акте должны быть таблицы материалов и работ"
+    for t in doc.tables:
+        tbl = t._tbl
+        tblW = tbl.tblPr.find(qn('w:tblW'))
+        assert tblW is not None, "tblW не задан"
+        assert tblW.get(qn('w:type')) == 'dxa', "Ширина таблицы должна быть фиксированной (dxa)"
+        grid = tbl.find(qn('w:tblGrid'))
+        cols = grid.findall(qn('w:gridCol'))
+        assert len(cols) == 9, f"В tblGrid {len(cols)} колонок вместо 9"
+        grid_sum = sum(int(c.get(qn('w:w'))) for c in cols)
+        assert int(tblW.get(qn('w:w'))) == grid_sum, "tblW не совпадает с суммой ширин колонок tblGrid"
+        # сумма ширин не должна превышать ширину листа минус поля (17.5 см = 9922 twips)
+        assert grid_sum <= 9922, f"Сумма ширин колонок {grid_sum} twips выходит за ширину листа"
+
+
+def test_act_no_underscore_run_exceeds_line_width():
+    """Неразрывные строки подчёркиваний не должны превышать ширину строки (~75 шт. при 12 pt)."""
+    import re
+
+    output = generate_act_docx([FakeWork()])
+    doc = Document(output)
+    max_run = 0
+    for p in doc.paragraphs:
+        for m in re.findall(r'_+', p.text):
+            max_run = max(max_run, len(m))
+    assert max_run <= 75, f"Найдена неразрывная строка подчёркиваний длиной {max_run} (> 75)"
