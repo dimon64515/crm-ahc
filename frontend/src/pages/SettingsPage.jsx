@@ -59,7 +59,7 @@ function UsersTab() {
 
   useEffect(() => { load(); }, []);
 
-  const load = async () => { setLoading(true); try { const res = await usersAPI.list(); setItems(res.data.items || []); } catch (e) {} finally { setLoading(false); } };
+  const load = async () => { setLoading(true); try { const res = await usersAPI.list({ per_page: 1000 }); setItems(res.data.items || []); } catch (e) {} finally { setLoading(false); } };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
