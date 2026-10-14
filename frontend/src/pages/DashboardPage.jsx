@@ -303,7 +303,7 @@ function DetailedReport() {
                   <td>{w.building?.number}</td>
                   <td>{w.created_by?.full_name || w.created_by?.username}</td>
                   <td>{serviceNames}</td>
-                  <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={w.description}>{w.description}</td>
+                  <td style={{ maxWidth: '200px', whiteSpace: 'normal', wordBreak: 'break-word' }} title={w.description}>{w.description}</td>
                   <td style={{ textAlign: 'center' }}>{(w.services || []).map(s => s.unit).filter(Boolean).join(', ') || '—'}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{(w.services || []).map(s => s.quantity).join(', ') || '—'}</td>
                   <td style={{ textAlign: 'right' }} className="tabular-nums">
