@@ -240,6 +240,7 @@ function DetailedReport() {
                   <span style={dashStyles.cardTotal}>{parseFloat(w.total_price || 0).toFixed(2)} ₽</span>
                 </div>
                 <div style={dashStyles.cardBody}>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Заявка:</span> {w.request_id || '—'}</div>
                   <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Корпус:</span> {w.building?.number || '—'}</div>
                   <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Подрядчик:</span> {w.created_by?.full_name || w.created_by?.username || '—'}</div>
                   <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Вид работы:</span> {serviceNames}</div>
@@ -271,6 +272,7 @@ function DetailedReport() {
             <thead>
               <tr>
                 <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>Дата {sortIcon('date')}</th>
+                <th>Заявка</th>
                 <th>Корпус</th>
                 <th>Подрядчик</th>
                 <th>Вид работы</th>
@@ -291,6 +293,7 @@ function DetailedReport() {
                 return (
                 <tr key={w.id} style={{ cursor: 'pointer' }} onClick={(e) => { if (!e.target.closest('button')) navigate(`/works/${w.id}`); }}>
                   <td>{w.work_date}</td>
+                  <td className="tabular-nums">{w.request_id || '—'}</td>
                   <td>{w.building?.number}</td>
                   <td>{w.created_by?.full_name || w.created_by?.username}</td>
                   <td>{serviceNames}</td>
@@ -313,7 +316,7 @@ function DetailedReport() {
                 );
               })}
               {works.length === 0 && !loading && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 16px' }}>
+                <tr><td colSpan={13} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 16px' }}>
                   <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
                   <div>Нет данных для отображения</div>
                   <div style={{ fontSize: '13px', marginTop: '4px' }}>Измените фильтры или создайте новую запись</div>
@@ -321,7 +324,7 @@ function DetailedReport() {
               )}
               {works.length > 0 && (
                 <tr style={{ background: '#eff6ff', fontWeight: 600 }}>
-                  <td colSpan={8} style={{ textAlign: 'right', paddingRight: '16px' }}>ИТОГО по странице:</td>
+                  <td colSpan={9} style={{ textAlign: 'right', paddingRight: '16px' }}>ИТОГО по странице:</td>
                   <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.service_total.toFixed(2)}</td>
                   <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.materials_total.toFixed(2)}</td>
                   <td style={{ textAlign: 'right' }} className="tabular-nums">{totals.total.toFixed(2)}</td>
