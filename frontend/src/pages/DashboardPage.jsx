@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { worksAPI, reportsAPI, buildingsAPI, servicesAPI, usersAPI, requestsAPI } from '../api';
 
@@ -240,7 +240,9 @@ function DetailedReport() {
                   <span style={dashStyles.cardTotal}>{parseFloat(w.total_price || 0).toFixed(2)} ₽</span>
                 </div>
                 <div style={dashStyles.cardBody}>
-                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Заявка:</span> {w.request_id || '—'}</div>
+                  <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Заявка:</span> {w.request_id ? (
+                    <Link to={`/requests/${w.request_id}`} onClick={(e) => e.stopPropagation()} style={{ color: '#2563eb' }}>№{w.request_id}</Link>
+                  ) : '—'}</div>
                   <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Корпус:</span> {w.building?.number || '—'}</div>
                   <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Подрядчик:</span> {w.created_by?.full_name || w.created_by?.username || '—'}</div>
                   <div style={dashStyles.cardField}><span style={dashStyles.cardLabel}>Вид работы:</span> {serviceNames}</div>
@@ -293,7 +295,11 @@ function DetailedReport() {
                 return (
                 <tr key={w.id} style={{ cursor: 'pointer' }} onClick={(e) => { if (!e.target.closest('button')) navigate(`/works/${w.id}`); }}>
                   <td>{w.work_date}</td>
-                  <td className="tabular-nums">{w.request_id || '—'}</td>
+                  <td className="tabular-nums">
+                    {w.request_id ? (
+                      <Link to={`/requests/${w.request_id}`} onClick={(e) => e.stopPropagation()} style={{ color: '#2563eb' }}>№{w.request_id}</Link>
+                    ) : '—'}
+                  </td>
                   <td>{w.building?.number}</td>
                   <td>{w.created_by?.full_name || w.created_by?.username}</td>
                   <td>{serviceNames}</td>
