@@ -445,6 +445,7 @@ function SummaryReport() {
 function RequestsDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [hoveredTile, setHoveredTile] = useState(null);
   const [items, setItems] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -514,6 +515,14 @@ function RequestsDashboard() {
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
   const isOverdue = (r) => r.status !== 'completed' && r.due_date && new Date(r.due_date) < new Date(new Date().setHours(0,0,0,0));
 
+  const statTiles = [
+    { key: 'total', count: counts.total, label: 'Всего заявок', color: '#374151', bg: '#f3f4f6', query: '' },
+    { key: 'new', count: counts.new, label: 'Новые', color: '#2563eb', bg: '#eff6ff', query: '?status=new' },
+    { key: 'in_progress', count: counts.in_progress, label: 'В работе', color: '#d97706', bg: '#fffbeb', query: '?status=in_progress' },
+    { key: 'completed', count: counts.completed, label: 'Завершены', color: '#059669', bg: '#f0fdf4', query: '?status=completed' },
+    { key: 'overdue', count: counts.overdue, label: 'Просрочено', color: counts.overdue ? '#dc2626' : '#374151', bg: counts.overdue ? '#fef2f2' : '#f3f4f6', query: '?overdue=1' },
+  ];
+
   useEffect(() => {
     setSelectedIds([]);
   }, [filterStatus, filterBuilding, filterCreatedFrom, filterCreatedTo, filterCompletedFrom, filterCompletedTo]);
@@ -563,26 +572,26 @@ function RequestsDashboard() {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-        <div style={{ ...dashStyles.card, background: '#f3f4f6' }}>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#374151' }}>{counts.total}</div>
-          <div style={{ fontSize: '13px', color: '#6b7280' }}>Всего заявок</div>
-        </div>
-        <div style={{ ...dashStyles.card, background: '#eff6ff' }}>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#2563eb' }}>{counts.new}</div>
-          <div style={{ fontSize: '13px', color: '#2563eb' }}>Новые</div>
-        </div>
-        <div style={{ ...dashStyles.card, background: '#fffbeb' }}>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#d97706' }}>{counts.in_progress}</div>
-          <div style={{ fontSize: '13px', color: '#d97706' }}>В работе</div>
-        </div>
-        <div style={{ ...dashStyles.card, background: '#f0fdf4' }}>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#059669' }}>{counts.completed}</div>
-          <div style={{ fontSize: '13px', color: '#059669' }}>Завершены</div>
-        </div>
-        <div style={{ ...dashStyles.card, background: counts.overdue ? '#fef2f2' : '#f3f4f6' }}>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: counts.overdue ? '#dc2626' : '#374151' }}>{counts.overdue}</div>
-          <div style={{ fontSize: '13px', color: counts.overdue ? '#dc2626' : '#6b7280' }}>Просрочено</div>
-        </div>
+        {statTiles.map((t) => (
+          <div
+            key={t.key}
+            onClick={() => navigate(`/requests${t.query}`)}
+            onMouseEnter={() => setHoveredTile(t.key)}
+            onMouseLeave={() => setHoveredTile(null)}
+            title="Показать заявки"
+            style={{
+              ...dashStyles.card,
+              background: t.bg,
+              cursor: 'pointer',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+              transform: hoveredTile === t.key ? 'translateY(-2px)' : 'none',
+              boxShadow: hoveredTile === t.key ? '0 4px 10px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.08)',
+            }}
+          >
+            <div style={{ fontSize: '24px', fontWeight: 700, color: t.color }}>{t.count}</div>
+            <div style={{ fontSize: '13px', color: t.color }}>{t.label}</div>
+          </div>
+        ))}
       </div>
 
       <div style={styles.filters}>

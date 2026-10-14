@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from "react-router-dom";;
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, buildingsAPI, usersAPI, servicesAPI } from '../api';
+
+const isOverdueRequest = (req) => {
+  if (!req.due_date || req.status === 'completed') return false;
+  const [y, m, d] = req.due_date.split('-').map(Number);
+  const due = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+};
 
 const STATUS_BUTTONS = [
   { value: 'new', label: 'Новые', style: { background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' } },
@@ -93,12 +102,15 @@ function RequestActions({ req, actionId, canTake, canAssign, canPrint, canExtend
 
 export default function RequestsListPage() {
   const { user } = useAuth(); const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const isContractor = user?.role === 'contractor';
+  // Фильтры из URL (переход с дашборда): ?status=new|in_progress|completed, ?overdue=1
+  const [onlyOverdue, setOnlyOverdue] = useState(() => searchParams.get('overdue') === '1');
   const [filters, setFilters] = useState({
-    status: 'new',
+    status: searchParams.has('status') ? searchParams.get('status') : 'new',
     building_id: '',
     created_from: '',
     created_to: '',
@@ -149,7 +161,8 @@ export default function RequestsListPage() {
     setError('');
     try {
       const params = {};
-      if (filters.status) params.status = filters.status;
+      // При фильтре «Просрочено» игнорируем статус: показываем все просроченные заявки
+      if (filters.status && !onlyOverdue) params.status = filters.status;
       if (filters.building_id) params.building_id = filters.building_id;
       if (filters.created_from) params.created_from = filters.created_from;
       if (filters.created_to) params.created_to = filters.created_to;
@@ -163,6 +176,11 @@ export default function RequestsListPage() {
         items = items.filter(req => req.executor?.id === user.id);
       }
 
+      // Фильтр «Просрочено» (переход с дашборда): незавершённые с истёкшим сроком
+      if (onlyOverdue) {
+        items = items.filter(isOverdueRequest);
+      }
+
       setItems(items);
     } catch (e) {
       setError(e.response?.data?.detail || 'Ошибка загрузки заявок');
@@ -170,7 +188,7 @@ export default function RequestsListPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters, isContractor, user]);
+  }, [filters, isContractor, user, onlyOverdue]);
 
   useEffect(() => {
     loadBuildings();
@@ -286,14 +304,6 @@ export default function RequestsListPage() {
     return new Date(d).toLocaleDateString('ru-RU');
   };
 
-  const isOverdue = (req) => {
-    if (!req.due_date || req.status === 'completed') return false;
-    const [y, m, d] = req.due_date.split('-').map(Number);
-    const due = new Date(y, m - 1, d);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return due < today;
-  };
 
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -354,11 +364,11 @@ export default function RequestsListPage() {
 
       <div style={styles.tabBar}>
         {STATUS_BUTTONS.map((s) => {
-          const active = filters.status === s.value;
+          const active = filters.status === s.value && !onlyOverdue;
           return (
             <button
               key={s.value}
-              onClick={() => setFilters({ ...filters, status: s.value })}
+              onClick={() => { setOnlyOverdue(false); setFilters({ ...filters, status: s.value }); }}
               style={{
                 ...styles.tabBtn,
                 color: active ? s.style.color : '#6b7280',
@@ -371,6 +381,20 @@ export default function RequestsListPage() {
             </button>
           );
         })}
+        {onlyOverdue && (
+          <button
+            onClick={() => setOnlyOverdue(false)}
+            style={{
+              ...styles.tabBtn,
+              color: '#dc2626',
+              borderBottomColor: '#dc2626',
+              background: '#fef2f2',
+              fontWeight: 700,
+            }}
+          >
+            Просроченные ✕
+          </button>
+        )}
       </div>
 
       <div style={styles.filters}>
@@ -464,10 +488,10 @@ export default function RequestsListPage() {
                 <div style={styles.cardField}><span style={styles.cardLabel}>Услуга:</span> {renderServiceCell(req)}</div>
                 <div style={styles.cardField}><span style={styles.cardLabel}>Создатель:</span> {req.creator?.full_name || req.creator?.username || '—'}</div>
                 <div style={styles.cardField}><span style={styles.cardLabel}>Исполнитель:</span> {renderExecutorCell(req)}</div>
-                <div style={{ ...styles.cardField, ...(isOverdue(req) ? styles.overdueField : {}) }}>
+                <div style={{ ...styles.cardField, ...(isOverdueRequest(req) ? styles.overdueField : {}) }}>
                   <span style={styles.cardLabel}>Срок:</span>
                   {formatDate(req.due_date)} · продлений: {req.extended_count || 0}
-                  {isOverdue(req) && <span style={{ ...styles.overdueText, marginLeft: '8px' }}>Просрочено</span>}
+                  {isOverdueRequest(req) && <span style={{ ...styles.overdueText, marginLeft: '8px' }}>Просрочено</span>}
                 </div>
               </div>
               <div style={styles.cardActions}>
@@ -538,7 +562,7 @@ export default function RequestsListPage() {
                   </td>
                   <td>{req.creator?.full_name || req.creator?.username || '—'}</td>
                   <td>{renderExecutorCell(req)}</td>
-                  <td className="tabular-nums" style={isOverdue(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
+                  <td className="tabular-nums" style={isOverdueRequest(req) ? { color: '#dc2626', fontWeight: 600 } : {}}>{formatDate(req.due_date)}</td>
                   <td style={{ textAlign: 'center' }} className="tabular-nums">{req.extended_count || 0}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', width: '1%' }}>
                     <div style={{ ...styles.actionsGroup, justifyContent: 'flex-end' }}>
