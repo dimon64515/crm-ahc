@@ -1,203 +1,61 @@
 # Инструкция по развёртыванию
 
+> Этот документ описывает **фактическую** схему развёртывания CRM на продакшен-сервере. Данные собраны с реальных конфигов сервера (systemd, nginx, cron) и должны считаться эталоном.
+
 ## Инфраструктура
 
-- **Сервер:** Текущий VPS (уже работает `bot.fanat-mv.ru`)
+- **Сервер:** VPS, хостинг нескольких сервисов (в т.ч. `bot.fanat-mv.ru`)
 - **Домен:** `report.fanat-mv.ru`
-- **ОС:** Linux (предположительно Ubuntu/Debian)
-- **Nginx:** Уже установлен и настроен
+- **ОС:** Ubuntu 24.04
+- **Код:** репозиторий `/home/dimon64515/projects/crm`, владелец `dimon64515`
+- **Nginx:** установлен и настроен, конфиг подключён через `sites-enabled`
 
-## Занятые порты
+> **Устаревший путь:** раньше код размещался в `/var/www/crm` (владелец `www-data`). Директория `/var/www/crm` — мёртвая копия от 3 августа, **не используется** и в будущем будет удалена. Все упоминания `/var/www/crm` и `User=www-data` в старых инструкциях игнорировать.
+
+## Занятые порты (проверено на сервере)
 
 ```
 22    — SSH
-53    — DNS
 80    — HTTP (Nginx)
 443   — HTTPS (Nginx)
-2096  — Другой сервис
-4173  — Другой сервис
-8081  — bot.fanat-mv.ru (другой сервис)
-8088  — Другой сервис
-8443  — Другой сервис
-8444  — Другой сервис
-50177 — Другой сервис
+4173  — Другой сервис (bot.fanat-mv.ru)
+5432  — PostgreSQL (localhost only)
+8090  — CRM Backend (127.0.0.1 only)
 ```
-
-## Выделенные порты для CRM
-
-| Сервис | Порт | Доступ |
-|--------|------|--------|
-| PostgreSQL | 5432 | localhost only |
-| FastAPI Backend | 8090 | localhost only |
-| Frontend (статика) | — | через Nginx |
 
 ## Структура директорий на сервере
 
 ```
-/var/www/crm/
-├── frontend/
-│   └── dist/              # Сборка React-приложения
+/home/dimon64515/projects/crm/     # Рабочая копия репозитория (git pull отсюда)
 ├── backend/
 │   ├── app/               # Исходный код FastAPI
 │   ├── venv/              # Виртуальное окружение Python
+│   ├── .env               # Переменные окружения (права 600, владелец dimon64515)
+│   ├── alembic.ini
 │   └── requirements.txt
-├── uploads/
+├── frontend/
+│   └── dist/              # Продакшен-сборка React (отдаётся nginx'ом)
+├── uploads/               # Файловое хранилище (фото, документы, бэкапы)
 │   ├── photos/
-│   │   └── building_{N}/  # Фото по корпусам
-│   ├── files/             # Документы
-│   └── temp/              # Временные файлы
-└── .env                   # Переменные окружения
+│   ├── files/
+│   ├── temp/
+│   └── backups/           # Полные бэкапы, создаваемые через UI приложения
+└── docker-compose.yml     # НЕ используется и НЕ поддерживается (см. ниже)
 ```
 
-## Переменные окружения (.env)
+## Важно про Docker
 
-```bash
-# Database
-DATABASE_URL=postgresql://crm_user:secure_password@localhost:5432/crm_db
+`docker-compose.yml` в репозитории **не используется и не поддерживается**: в репозитории нет Dockerfile для backend/frontend, поэтому сборка контейнеров невозможна. Реальный продакшен работает по схеме «systemd + nginx + venv/npm» из этого документа. Не пытайтесь разворачивать систему через docker-compose.
 
-# JWT
-SECRET_KEY=your-super-secret-random-key-min-32-chars
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
+## База данных
 
-# App
-APP_NAME=CRM АХЧ
-DEBUG=False
-UPLOAD_DIR=/var/www/crm/uploads
-MAX_FILE_SIZE=10485760
+- PostgreSQL 16 (Ubuntu), слушает только localhost (`5432`).
+- БД: `crm_db`, креды — в `backend/.env` (параметр `DATABASE_URL`, файл с правами 600).
+- Миграции: Alembic, применяются из `backend/` командой `alembic upgrade head`.
 
-# CORS
-ALLOWED_ORIGINS=https://report.fanat-mv.ru
-```
+## Backend (systemd)
 
-## Установка и настройка
-
-### 1. PostgreSQL
-
-```bash
-# Установка (если не установлен)
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-
-# Запуск
-sudo systemctl enable postgresql
-sudo systemctl start postgresql
-
-# Создание БД и пользователя
-sudo -u postgres psql
-
-CREATE DATABASE crm_db;
-CREATE USER crm_user WITH PASSWORD 'secure_password';
-GRANT ALL PRIVILEGES ON DATABASE crm_db TO crm_user;
-\q
-```
-
-### 2. Python + FastAPI
-
-```bash
-# Установка Python (если нет)
-sudo apt install python3 python3-pip python3-venv
-
-# Создание окружения
-cd /var/www/crm/backend
-python3 -m venv venv
-source venv/bin/activate
-
-# Установка зависимостей
-pip install -r requirements.txt
-
-# Применение миграций
-alembic upgrade head
-
-# Создание первого администратора
-python -c "from app.core.security import get_password_hash; print(get_password_hash('admin_password'))"
-# Вставить хеш в БД
-```
-
-### 3. Nginx конфигурация
-
-Создать файл `/etc/nginx/sites-available/report.fanat-mv.ru`:
-
-```nginx
-server {
-    listen 80;
-    server_name report.fanat-mv.ru;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name report.fanat-mv.ru;
-
-    # SSL
-    ssl_certificate /etc/letsencrypt/live/report.fanat-mv.ru/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/report.fanat-mv.ru/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # Logs
-    access_log /var/log/nginx/crm_access.log;
-    error_log /var/log/nginx/crm_error.log;
-
-    # Frontend (React статика)
-    location / {
-        root /var/www/crm/frontend/dist;
-        index index.html;
-        try_files $uri $uri/ /index.html;
-        
-        # Кэширование статики
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-    }
-
-    # Backend API
-    location /api/ {
-        proxy_pass http://localhost:8090/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # Таймауты для загрузки файлов
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        client_max_body_size 50M;
-    }
-
-    # Загруженные файлы
-    location /uploads/ {
-        alias /var/www/crm/uploads/;
-        expires 7d;
-        add_header Cache-Control "public";
-    }
-}
-```
-
-Активация:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/report.fanat-mv.ru /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 4. SSL сертификат (Let's Encrypt)
-
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d report.fanat-mv.ru
-```
-
-### 5. Systemd сервис для backend
-
-Создать файл `/etc/systemd/system/crm-backend.service`:
+Реальный юнит — `/etc/systemd/system/crm-backend.service` (текст приведён полностью, соответствует серверу):
 
 ```ini
 [Unit]
@@ -205,13 +63,13 @@ Description=CRM AHC Backend (FastAPI)
 After=network.target postgresql.service
 
 [Service]
-Type=exec
-User=www-data
-Group=www-data
-WorkingDirectory=/var/www/crm/backend
-Environment="PATH=/var/www/crm/backend/venv/bin"
-EnvironmentFile=/var/www/crm/.env
-ExecStart=/var/www/crm/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8090
+Type=simple
+User=dimon64515
+Group=dimon64515
+WorkingDirectory=/home/dimon64515/projects/crm/backend
+Environment=PATH=/home/dimon64515/projects/crm/backend/venv/bin
+Environment=PYTHONPATH=/home/dimon64515/projects/crm/backend
+ExecStart=/home/dimon64515/projects/crm/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8090
 Restart=always
 RestartSec=5
 
@@ -219,97 +77,130 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Активация:
+Ключевые моменты:
+
+- Сервис работает **от пользователя `dimon64515`** (не `www-data`).
+- Переменные окружения подтягиваются из `backend/.env` приложением самостоятельно (pydantic-settings), `EnvironmentFile` в юните не используется.
+- uvicorn слушает только `127.0.0.1:8090`, наружу смотрит nginx.
+
+Управление:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable crm-backend
-sudo systemctl start crm-backend
 sudo systemctl status crm-backend
+sudo systemctl restart crm-backend
+sudo journalctl -u crm-backend -f
 ```
 
-### 6. Frontend (сборка)
+Health-check: `GET /api/health` → `{"status":"ok","version":"..."}`.
 
 ```bash
-cd /var/www/crm/frontend
-
-# Установка зависимостей
-npm install
-
-# Сборка для продакшена
-npm run build
-
-# Результат попадёт в /var/www/crm/frontend/dist
-```
-
-### 7. Права доступа
-
-```bash
-sudo chown -R www-data:www-data /var/www/crm
-sudo chmod -R 755 /var/www/crm
-sudo chmod -R 775 /var/www/crm/uploads
-```
-
----
-
-## Проверка развёртывания
-
-```bash
-# Backend API
+curl http://127.0.0.1:8090/api/health
 curl https://report.fanat-mv.ru/api/health
-
-# Ожидаемый ответ:
-# {"status":"ok","version":"1.0.0"}
-
-# Frontend
-curl -I https://report.fanat-mv.ru/
-# HTTP/2 200
 ```
 
----
+## Frontend (Nginx)
+
+- Сборка: `npm ci && npm run build` в `frontend/`, результат — `frontend/dist`.
+- nginx отдаёт статику из `/home/dimon64515/projects/crm/frontend/dist` и проксирует `/api/` на `127.0.0.1:8090`.
+- Активный конфиг: `/etc/nginx/sites-enabled/report.fanat-mv.ru`. Эталонная копия в репозитории — `docs/nginx-report.fanat-mv.ru.conf` (должна совпадать с серверным файлом).
+- `index.html` отдаётся с запретом кэширования, обновления фронтенда подхватываются без очистки кэша.
+
+После сборки достаточно проверить `curl -I https://report.fanat-mv.ru/` — перезапуск nginx не нужен.
+
+## SSL
+
+- Сертификат Let's Encrypt (certbot).
+- Автопродление настроено: systemd-таймер `certbot.timer` (проверяется через `systemctl list-timers | grep certbot`).
+
+## Бэкапы
+
+### База данных (автоматический ежедневный дамп)
+
+Ежедневно в **03:47** cron запускает `/usr/local/sbin/crm-db-backup.sh` (задание в `/etc/cron.d/crm-db-backup`, stderr дублируется в syslog через `logger`).
+
+Что делает скрипт:
+
+1. Читает `DATABASE_URL` из `backend/.env` (права 600, поэтому задача выполняется от `root`).
+2. Делает `pg_dump` в custom-формате (`-Fc`) в `/var/backups/crm/crm_db_YYYYMMDD_HHMMSS.dump`.
+3. Проверяет целостность дампа через `pg_restore --list`; при ошибке дамп удаляется.
+4. Ротация: хранятся последние **14** успешных дампов.
+5. Лог: `/var/backups/crm/backup.log`.
+
+Проверка:
+
+```bash
+sudo cat /var/backups/crm/backup.log
+sudo ls -lh /var/backups/crm/
+```
+
+Восстановление из дампа (в БД crm_db):
+
+```bash
+sudo -u postgres pg_restore -d crm_db --clean --if-exists /var/backups/crm/crm_db_<дата>.dump
+```
+
+### Полные бэкапы приложения (через UI)
+
+Полные бэкапы (БД + файлы) создаются через интерфейс администратора и сохраняются в `uploads/backups/`. Детали — в `docs/backup.md`.
+
+### Загруженные файлы
+
+Загруженные пользователями файлы (`uploads/photos`, `uploads/files` и т.д.) отдельного системного бэкапа не имеют — они входят в полные бэкапы через UI. При необходимости архивируйте `uploads/` вручную.
 
 ## Обновление системы
 
-### Обновление backend
+Деплой выполняется единым скриптом `scripts/deploy.sh` из корня репозитория (на сервере — от пользователя `dimon64515`):
 
 ```bash
-cd /var/www/crm/backend
-git pull
+cd /home/dimon64515/projects/crm
+./scripts/deploy.sh                    # полный деплой (backend + frontend)
+./scripts/deploy.sh --backend-only     # только backend
+./scripts/deploy.sh --frontend-only    # только frontend
+```
+
+Что делает скрипт: `git pull --ff-only` → backend (`pip install` в venv, `alembic upgrade head`, `systemctl restart crm-backend` с health-check до 30 сек) → frontend (`npm ci`, `npm run build`). Если backend после перезапуска не отвечает на `GET /api/health`, скрипт печатает хвост журнала и команду ручного отката.
+
+**Ручная последовательность** (fallback, если скрипт недоступен):
+
+```bash
+# Backend
+cd /home/dimon64515/projects/crm/backend
+git pull --ff-only
 source venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
 sudo systemctl restart crm-backend
-```
+curl http://127.0.0.1:8090/api/health   # проверка
 
-### Обновление frontend
-
-```bash
-cd /var/www/crm/frontend
-git pull
-npm install
+# Frontend
+cd /home/dimon64515/projects/crm/frontend
+git pull --ff-only
+npm ci
 npm run build
-# Nginx автоматически подхватит новые файлы
+# nginx подхватит новые файлы из dist автоматически
+curl -I https://report.fanat-mv.ru/      # проверка
 ```
 
----
+## Откат
 
-## Резервное копирование
-
-### База данных
+При неудачном деплое скрипт печатает команду отката на коммит, с которого начинался деплой (`git checkout <хеш>` + повторный `./scripts/deploy.sh`). Откат вручную:
 
 ```bash
-# Ежедневный бэкап через cron
-0 3 * * * pg_dump crm_db | gzip > /var/backups/crm/db_$(date +\%Y\%m\%d).sql.gz
+# Backend
+cd /home/dimon64515/projects/crm/backend
+git checkout <хеш-коммита>
+source venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head   # или alembic downgrade <ревизия> при необходимости
+sudo systemctl restart crm-backend
+
+# Frontend
+cd /home/dimon64515/projects/crm/frontend
+git checkout <хеш-коммита>
+npm ci && npm run build
 ```
 
-### Файлы
-
-```bash
-# Ежедневный бэкап загруженных файлов
-0 4 * * * tar -czf /var/backups/crm/uploads_$(date +\%Y\%m\%d).tar.gz /var/www/crm/uploads
-```
-
----
+Откат данных — из дампа `/var/backups/crm/` (`pg_restore --clean --if-exists`) или из полного бэкапа через UI.
 
 ## Мониторинг
 
@@ -319,25 +210,29 @@ npm run build
 # Backend
 sudo journalctl -u crm-backend -f
 
-# Nginx
-sudo tail -f /var/log/nginx/crm_error.log
+# Бэкапы БД
+sudo tail -f /var/backups/crm/backup.log
 
-# PostgreSQL
-sudo tail -f /var/log/postgresql/postgresql-*.log
+# Nginx
+sudo tail -f /var/log/nginx/error.log
 ```
 
 ### Проверка состояния
 
 ```bash
-# Backend работает?
-sudo systemctl is-active crm-backend
+sudo systemctl is-active crm-backend postgresql nginx
+curl https://report.fanat-mv.ru/api/health
 
-# PostgreSQL работает?
-sudo systemctl is-active postgresql
-
-# Nginx работает?
-sudo systemctl is-active nginx
+# SSH-брутфорс: fail2ban (jail sshd)
+sudo fail2ban-client status sshd
 
 # Свободное место
-df -h /var/www/crm
+df -h
 ```
+
+## Безопасность сервера (кратко)
+
+- SSH: парольный вход **выключен** (только ключи), установлен fail2ban с jail `sshd` (`sudo fail2ban-client status sshd`).
+- `backend/.env` — права 600, владелец `dimon64515`; в git не коммитится.
+- PostgreSQL доступен только с localhost.
+- Backend слушает только `127.0.0.1:8090`, наружу смотрит nginx.

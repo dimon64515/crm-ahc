@@ -10,7 +10,7 @@
 
 - **Frontend:** React 18 + Vite + React Router
 - **Backend:** Python 3.11 + FastAPI + SQLAlchemy
-- **База данных:** PostgreSQL 15
+- **База данных:** PostgreSQL 16
 - **Хранилище файлов:** Локальная файловая система (организованная по папкам корпусов)
 - **Веб-сервер:** Nginx (reverse proxy)
 - **Аутентификация:** JWT (JSON Web Tokens)
@@ -40,11 +40,10 @@ crm/
 │   │   ├── services/       # Бизнес-логика
 │   │   ├── core/           # Конфигурация, авторизация
 │   │   └── main.py         # Точка входа
-│   ├── requirements.txt
-│   └── Dockerfile
-├── database/               # Миграции и скрипты БД
-│   └── migrations/
-└── docker-compose.yml      # Docker Compose (опционально)
+│   ├── alembic/            # Миграции БД
+│   ├── tests/
+│   └── requirements.txt
+└── docker-compose.yml      # Не используется (нет Dockerfile, не поддерживается)
 ```
 
 ## Роли пользователей
