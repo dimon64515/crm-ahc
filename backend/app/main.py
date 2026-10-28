@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_secret_key
 from app.database import engine, Base
 from app.routers import auth, users, buildings, services, materials, works, reports, backups
 from app.routers import requests as requests_router
@@ -11,6 +11,7 @@ from app.routers import push as push_router
 from app.routers.admin import audit_logs
 
 settings = get_settings()
+validate_secret_key(settings.SECRET_KEY)
 
 # Создание таблиц (для dev, в продакшене используем Alembic)
 # Base.metadata.create_all(bind=engine)

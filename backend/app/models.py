@@ -77,7 +77,12 @@ class Work(Base):
     total_price = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
+    __table_args__ = (
+        # На одну заявку может существовать только один отчёт (защита от гонок на уровне БД)
+        UniqueConstraint('request_id', name='uix_work_request'),
+    )
+
     user = relationship("User", back_populates="works")
     building = relationship("Building", back_populates="works")
     request = relationship("Request")

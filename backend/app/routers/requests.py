@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db, SessionLocal
 from app.models import Request, RequestPhoto, Building, User, Service, Work, WorkService, WorkMaterial, AuditLog
 from decimal import Decimal
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from app.schemas import RequestCreate, RequestResponse, RequestListResponse, RequestAssign, RequestPrintPayload, RequestUpdate, AdminRequestUpdate, RequestDeleteResponse
 from app.core.dependencies import get_current_user, require_comendant, require_executor, require_director, require_admin
 from app.core.config import get_settings
@@ -440,11 +442,17 @@ def take_request(
     req = db.query(Request).filter(Request.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    if req.status != "new":
-        raise HTTPException(status_code=400, detail="Взять в работу можно только новую заявку")
 
-    req.assigned_to = current_user.id
-    req.status = "in_progress"
+    # Атомарное взятие заявки: UPDATE выполняется только если заявка всё ещё новая,
+    # что исключает двойное назначение при одновременных запросах
+    result = db.execute(
+        update(Request)
+        .where(Request.id == request_id, Request.status == "new")
+        .values(assigned_to=current_user.id, status="in_progress")
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Заявку уже взял другой исполнитель")
     db.commit()
     db.refresh(req)
     return build_request_response(req)
@@ -510,7 +518,11 @@ def complete_request(
             total_price=Decimal('0'),
         )
         db.add(existing_work)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Отчёт по этой заявке уже существует")
         if req.service_id is not None:
             service = db.query(Service).filter(Service.id == req.service_id, Service.is_active == True).first()
             if service:

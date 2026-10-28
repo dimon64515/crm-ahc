@@ -43,7 +43,7 @@
 ### INF-07. Секреты читаемы всеми; устаревшая `.env.bak`
 - **Место:** `backend/.env` и `backend/.env.bak` — права `-rw-rw-r--` (664). `.env.bak` — копия от 1 июля с секретами.
 - **Суть:** в git секреты не попадали (проверено), `.gitignore` корректен. Проблема — локальные права и лишняя копия.
-- **Рекомендация:** `chmod 600 backend/.env`, удалить `.env.bak`, следить чтобы бэкапы не копировали `.env`.
+- **Применено (2026-10-28):** `backend/.env` — права 600 (сделано в рамках INF-03), устаревшая `backend/.env.bak` удалена.
 
 ### INF-08. SSH-брутфорс — ГОТОВО (2026-10-28)
 - **Место:** `/var/log/btmp` + `btmp.1` ≈ 24 МБ неудачных входов.
@@ -66,7 +66,7 @@
 
 ### INF-10. Логи: ротация есть, но файлы-мусор
 - **Место:** `backend/backend.log` (338 байт, от 4 августа, ошибка «port already in use»), `frontend/frontend.log` (183 байта). Основные логи uvicorn → journald без лимита.
-- **Рекомендация:** удалить файлы, ограничить journald, при желании — файл-лог с ротацией.
+- **Применено (2026-10-28):** мёртвые логи удалены; лимит journald 200M (см. INF-02); ротация `/var/log/crm-monitor.log` — `/etc/logrotate.d/crm-monitor`.
 
 ### INF-11. Корневой `package.json`/`node_modules`
 - **Место:** корень содержит только `ctx7` (dev-инструмент), `node_modules` 25 МБ.
@@ -84,6 +84,7 @@
 - **Место:** `backend/app/routers/works.py:318` (update_work — блокировка только на `director`/`contractor`), `works.py:426-429` (delete_work — коменданта не блокирует вовсе).
 - **Суть:** комендант доходит до `db.commit()` и удаляет любую работу вместе с фото и файлами на диске.
 - **Рекомендация:** заменить «чёрные списки» ролей на `require_admin`/явные проверки.
+- **Исправлено (2026-10-28):** обе проверки переведены на «белый список»: update — только admin (директор read-only, подрядчик не редактирует — намеренная семантика); delete — admin или подрядчик-владелец. Регрессионные тесты в `backend/tests/test_security_regressions.py`. Задеплоено, health 200.
 
 ### BE-02. Все загруженные файлы публично доступны без авторизации
 - **Место:** `backend/app/main.py:36` (StaticFiles без middleware), `docs/nginx-report.fanat-mv.ru.conf` (`location /uploads/` без auth).
@@ -94,10 +95,12 @@
 - **Место:** `backend/app/core/config.py:11` — `SECRET_KEY` со значением-заглушкой; `docker-compose.yml` (`dev-secret-key-change-in-production`), `docs/deployment.md:59`.
 - **Суть:** если `.env` не подхвачен, приложение стартует с известным ключом → подделка токенов любой роли. Нет assert'а.
 - **Рекомендация:** падать при старте, если ключ равен дефолту.
+- **Исправлено (2026-10-28):** `config.py` — `validate_secret_key()`, вызывается при старте приложения (main.py); дефолт/пустой ключ → RuntimeError с русским сообщением. Alembic из shell не сломан (env.py не трогали, проверено `alembic current`). Тесты в test_security_regressions.py.
 
 ### BE-04. Гонки: дубли отчётов на заявку и двойное «взятие» заявки
 - **Место:** `works.py:172-175`, `requests.py:499-527` — проверка существующего Work до вставки; `models.py:73` — нет `UniqueConstraint('request_id')`. `requests.py:434-450` (`take_request`) — два подрядчика одновременно читают `status == "new"`.
 - **Рекомендация:** unique-констрейнт на `works.request_id` + `SELECT ... FOR UPDATE` / UPDATE с фильтром по статусу.
+- **Исправлено (2026-10-28):** дублей в прод-БД не было (проверено). Добавлен `UniqueConstraint('request_id', name='uix_work_request')` + миграция `d2abc734fe6c` (применена к crm_db). `take_request` — атомарный UPDATE с проверкой rowcount → 409. Дубли отчёта → 409 вместо 500 (IntegrityError обработан в create_work и complete_request). Тесты: 92 passed. Задеплоено.
 
 ### BE-05. «Успешный» бэкап без дампа БД при отсутствии pg_dump
 - **Место:** `backups.py:63-65` — при `FileNotFoundError` в дамп пишется заглушка, бэкап логируется `status="completed"` (`backups.py:205`).

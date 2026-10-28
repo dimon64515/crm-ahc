@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List
 from decimal import Decimal
 
@@ -172,7 +173,7 @@ def create_work(
     if data.request_id is not None:
         existing_work = db.query(Work).filter(Work.request_id == data.request_id).first()
         if existing_work is not None:
-            raise HTTPException(status_code=400, detail="Отчёт для этой заявки уже существует")
+            raise HTTPException(status_code=409, detail="Отчёт по этой заявке уже существует")
 
     work = Work(
         user_id=work_user_id,
@@ -184,7 +185,11 @@ def create_work(
         total_price=Decimal('0'),
     )
     db.add(work)
-    db.flush()  # Получаем work.id
+    try:
+        db.flush()  # Получаем work.id; уникальность request_id проверяется констрейнтом БД
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Отчёт по этой заявке уже существует")
 
     # Добавление услуг
     service_total = Decimal('0')
@@ -225,7 +230,11 @@ def create_work(
     if req is not None and current_user.role == 'contractor':
         req.status = 'completed'
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Отчёт по этой заявке уже существует")
     db.refresh(work)
     return build_work_response(work)
 
@@ -315,7 +324,8 @@ def update_work(
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
 
-    if current_user.role in ('director', 'contractor'):
+    # Редактировать отчёты может только администратор (белый список)
+    if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Редактирование записей доступно только администратору")
 
     if current_user.role == 'admin':
@@ -423,9 +433,9 @@ def delete_work(
     if not work:
         raise HTTPException(status_code=404, detail="Работа не найдена")
 
-    if current_user.role == 'director':
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
-    if current_user.role == 'contractor' and work.user_id != current_user.id:
+    # Удалять отчёты может администратор или подрядчик-владелец (белый список)
+    is_owner_contractor = current_user.role == 'contractor' and work.user_id == current_user.id
+    if current_user.role != 'admin' and not is_owner_contractor:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
 
     for photo in work.photos:

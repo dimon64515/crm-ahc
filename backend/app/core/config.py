@@ -1,6 +1,17 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
+# Дефолтное значение из репозитория — небезопасно, запуск с ним запрещён
+DEFAULT_SECRET_KEY = "your-super-secret-key-change-in-production-min-32-chars"
+
+
+def validate_secret_key(secret_key: str) -> None:
+    """Проверяет, что SECRET_KEY задан и не равен значению по умолчанию."""
+    if not secret_key or secret_key == DEFAULT_SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY не задан или равен значению по умолчанию — установите его в backend/.env"
+        )
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "CRM АХЧ"
@@ -8,7 +19,7 @@ class Settings(BaseSettings):
     
     DATABASE_URL: str = "postgresql://crm_user:crm_password@localhost:5432/crm_db"
     
-    SECRET_KEY: str = "your-super-secret-key-change-in-production-min-32-chars"
+    SECRET_KEY: str = DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 дней
     
     UPLOAD_DIR: str = "/var/www/crm/uploads"
