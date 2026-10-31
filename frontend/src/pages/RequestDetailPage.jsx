@@ -250,7 +250,7 @@ export default function RequestDetailPage() {
     isDirector || (user.role === 'contractor' && req?.executor?.id === user.id)
   );
   const canExtend = isAdmin && req?.status !== 'completed';
-  const canEdit = isDirector && req?.status !== 'completed';
+  const canEdit = isDirector;
   const canCreateWork = req && req.status !== 'completed' && !req.has_work && ['contractor', 'director', 'admin'].includes(user.role) && (user.role !== 'contractor' || req.executor?.id === user.id);
 
   const backPath = isComendant ? '/my-requests' : '/requests';

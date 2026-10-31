@@ -525,12 +525,12 @@ def test_comendant_cannot_update_request():
     db.close()
 
 
-def test_cannot_update_completed_request():
+def test_director_can_update_completed_request():
     db = TestingSessionLocal()
-    admin = User(username="admin_update", hashed_password=get_password_hash("pass"), role="admin", is_active=True)
+    director = User(username="director_update_completed", hashed_password=get_password_hash("pass"), role="director", is_active=True)
     comendant = User(username="comendant_update2", hashed_password=get_password_hash("pass"), role="comendant", is_active=True)
     building = Building(number="43", name="Корпус 43", is_active=True)
-    db.add_all([admin, comendant, building])
+    db.add_all([director, comendant, building])
     db.commit()
 
     req = Request(building_id=building.id, description="Описание", status="completed", created_by=comendant.id,
@@ -539,15 +539,16 @@ def test_cannot_update_completed_request():
     db.commit()
     db.refresh(req)
 
-    login = client.post("/api/auth/login", json={"username": "admin_update", "password": "pass"})
+    login = client.post("/api/auth/login", json={"username": "director_update_completed", "password": "pass"})
     token = login.json()["access_token"]
 
     response = client.put(
         f"/api/requests/{req.id}",
         headers={"Authorization": f"Bearer {token}"},
-        json={"description": "Попытка изменить завершённую"},
+        json={"description": "Исправленное описание"},
     )
-    assert response.status_code == 400, response.text
+    assert response.status_code == 200, response.text
+    assert response.json()["description"] == "Исправленное описание"
     db.close()
 
 

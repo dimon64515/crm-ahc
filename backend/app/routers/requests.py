@@ -269,9 +269,6 @@ def update_request(
     if req.deleted_at is not None:
         raise HTTPException(status_code=400, detail="Нельзя редактировать удалённую заявку")
 
-    if req.status == "completed":
-        raise HTTPException(status_code=400, detail="Нельзя редактировать завершённую заявку")
-
     old_values = {}
     new_values = {}
 
